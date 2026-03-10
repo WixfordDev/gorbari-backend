@@ -6,7 +6,6 @@ const compression = require("compression");
 const cors = require("cors");
 const passport = require("passport");
 const httpStatus = require("http-status");
-const status = require("express-status-monitor");
 const config = require("./config/config");
 const morgan = require("./config/morgan");
 const { jwtStrategy } = require("./config/passport");
@@ -53,9 +52,6 @@ passport.use("jwt", jwtStrategy);
 if (config.env === "production") {
   app.use("/v1/auth", authLimiter);
 }
-
-// Express Monitor
-app.use(status());
 
 // v1 api routes
 app.use("/api/v1", routes);
