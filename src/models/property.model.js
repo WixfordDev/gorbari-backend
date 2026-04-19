@@ -168,6 +168,28 @@ const propertySchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    commission: {
+      percentage: {
+        type: Number,
+        default: 10,
+        min: 0,
+        max: 100,
+      },
+      amount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      status: {
+        type: String,
+        enum: ["pending", "paid", "waived"],
+        default: "pending",
+      },
+      paidAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,

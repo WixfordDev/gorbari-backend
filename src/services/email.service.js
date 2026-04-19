@@ -120,6 +120,49 @@ const sendContactsUsEmail = async (allData) => {
 
 
 
+const sendSubAdminInvitationEmail = async (to, password, permissions, fullName) => {
+  const subject = "You have been invited as Sub-Admin - Ghorbari";
+  const permissionLabels = {
+    userManagement: "User Management",
+    properties: "Properties",
+    subscription: "Subscription",
+    payment: "Payment",
+    paymentGateways: "Payment Gateways",
+    transactionManagement: "Transaction Management",
+  };
+  const permissionList = permissions
+    .map((p) => `<li style="padding:4px 0; color:#374151;">${permissionLabels[p] || p}</li>`)
+    .join("");
+
+  const html = `
+  <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
+    <div style="max-width: 32rem; margin: 0 auto; background-color: #ffffff; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(0,0,0,0.15); text-align: center;">
+      <img src="https://raw.githubusercontent.com/shadat-hossan/Image-server/refs/heads/main/Ghorbari.png"
+        alt="Ghorbari" style="max-width: 10rem; margin-bottom: 1.5rem;">
+      <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: #1f2937;">Sub-Admin Invitation</h1>
+      <p style="color: #4b5563; margin-bottom: 1.5rem;">
+        Hello ${fullName || to}, you have been invited to manage the <strong>Ghorbari</strong> admin panel as a Sub-Admin.
+      </p>
+      <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:0.5rem; padding:1.25rem; text-align:left; margin-bottom:1.5rem;">
+        <p style="margin:0 0 8px 0; font-weight:600; color:#1f2937;">Your Login Credentials:</p>
+        <p style="margin:4px 0; color:#374151;"><strong>Email:</strong> ${to}</p>
+        <p style="margin:4px 0; color:#374151;"><strong>Password:</strong> ${password}</p>
+      </div>
+      ${
+        permissionList
+          ? `<div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:0.5rem; padding:1.25rem; text-align:left; margin-bottom:1.5rem;">
+        <p style="margin:0 0 8px 0; font-weight:600; color:#1f2937;">Your Access Permissions:</p>
+        <ul style="margin:0; padding-left:1.25rem;">${permissionList}</ul>
+      </div>`
+          : ""
+      }
+      <p style="color:#e6441c; font-size:0.875rem;">Please change your password after your first login.</p>
+    </div>
+  </body>`;
+
+  await sendEmail(to, subject, html);
+};
+
 const sendVerificationEmail = async (to, token) => {
   const subject = "Email Verification";
   // replace this url with the link to the email verification page of your front-end app
@@ -137,4 +180,5 @@ module.exports = {
   sendVerificationEmail,
   sendEmailVerification,
   sendContactsUsEmail,
+  sendSubAdminInvitationEmail,
 };

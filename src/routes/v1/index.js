@@ -8,6 +8,7 @@ const infoRoute = require("./info.routes");
 const contactRoute = require("./contact.routes");
 const subscriptionRoute = require("./subscription.route");
 const paymentGatewayRoute = require("./paymentGateway.routes");
+const subAdminRoute = require("./subAdmin.routes");
 
 const router = express.Router();
 
@@ -33,6 +34,10 @@ const defaultRoutes = [
     route: paymentGatewayRoute,
   },
 
+  {
+    path: "/sub-admins",
+    route: subAdminRoute,
+  },
   {
     path: "/contact",
     route: contactRoute,

@@ -54,4 +54,16 @@ const auth =
       .catch((err) => next(err));
   };
 
+// Allows admin unconditionally, or subAdmin if they hold the given permission
+const checkAccess = (permission) => (req, res, next) => {
+  const user = req.user;
+  if (!user) return next(new ApiError(httpStatus.UNAUTHORIZED, "You are not authorized"));
+  if (user.role === "admin") return next();
+  if (user.role === "subAdmin" && Array.isArray(user.permissions) && user.permissions.includes(permission)) {
+    return next();
+  }
+  return next(new ApiError(httpStatus.FORBIDDEN, "You do not have permission to perform this action"));
+};
+
 module.exports = auth;
+module.exports.checkAccess = checkAccess;

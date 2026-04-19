@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const validator = require("validator");
 const bcrypt = require("bcryptjs");
 const { toJSON, paginate } = require("./plugins");
-const { roles } = require("../config/roles");
+const { roles, SUB_ADMIN_PERMISSIONS } = require("../config/roles");
 
 const userSchema = mongoose.Schema(
   {
@@ -104,6 +104,11 @@ const userSchema = mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false
+    },
+    permissions: {
+      type: [String],
+      enum: SUB_ADMIN_PERMISSIONS,
+      default: [],
     },
     promotion: {
       type: Number,

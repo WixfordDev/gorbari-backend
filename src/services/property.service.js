@@ -4,6 +4,18 @@ const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 
 const createProperty = async (propertyBody) => {
+  // Calculate 10% commission from price
+  if (propertyBody.price) {
+    const commissionPercentage = 10;
+    const commissionAmount = propertyBody.price * (commissionPercentage / 100);
+    
+    propertyBody.commission = {
+      percentage: commissionPercentage,
+      amount: commissionAmount,
+      status: "pending",
+    };
+  }
+  
   return Property.create(propertyBody);
 };
 
@@ -131,6 +143,7 @@ const queryProperties = async (filter, options) => {
       isFeatures: 1,
       isBosted: 1,
       bostedRank: 1,
+      commission: 1,
       // costeExpiry: 1,
 
       createdBy: {
