@@ -1,0 +1,8 @@
+# pnpm 11 build-script policy
+# These deps declare postinstall scripts but are not used in src/:
+#   - @scarf/scarf         (telemetry/analytics)
+#   - event-loop-stats     (native perf stats, pulled by express-status-monitor)
+# Explicitly opt them out of running install scripts.
+allowBuilds:
+  '@scarf/scarf': false
+  'event-loop-stats': false

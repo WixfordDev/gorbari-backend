@@ -3,10 +3,10 @@ const pick = require("../utils/pick");
 const response = require("../config/response");
 const { propertyService, subscriptionService } = require("../services");
 const catchAsync = require("../utils/catchAsync");
-const unlinkImages = require("../common/unlinkImage");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 const cron = require("node-cron");
+const { Property } = require("../models");
 
 const createProperty = catchAsync(async (req, res) => {
   req.body.createdBy = req.user.id;

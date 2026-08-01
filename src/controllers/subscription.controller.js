@@ -3,7 +3,7 @@ const pick = require("../utils/pick");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
-const { subscriptionService, stripeService, userService } = require("../services");
+const { subscriptionService } = require("../services");
 
 const subscriptionCreate = catchAsync(async (req, res) => {
   const { type } = req.body;
@@ -82,7 +82,7 @@ const subscriptionDeleteById = catchAsync(async (req, res) => {
 });
 
 const subscriptionList = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ["title", "description", "tyep"]);
+  const filter = pick(req.query, ["title", "description", "type"]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
   const result = await subscriptionService.querySubscriptions(filter, options);
   res.status(httpStatus.OK).json(
