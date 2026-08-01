@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "build": "webpack --mode=production",
-    "seed": "node src/utils/seeder.js",
+    "seed": "node src/utils/seed/index.js",
+    "seed:reset": "node src/utils/seed/index.js --reset",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Md. Shadat Hossain",
