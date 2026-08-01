@@ -18,7 +18,14 @@ if (config.env !== "test") {
 
 const sendEmail = async (to, subject, html) => {
   const msg = { from: config.email.from, to, subject, html };
-  await transport.sendMail(msg);
+  try {
+    await transport.sendMail(msg);
+  } catch (err) {
+    // Email delivery is best-effort: never let an SMTP failure crash the
+    // process (fire-and-forget senders) or fail the API request (awaited
+    // senders). Log it so the issue is visible in the server output.
+    logger.error("Failed to send email: %s", err.message || err);
+  }
 };
 
 const sendEmailVerification = async (to, otp) => {
