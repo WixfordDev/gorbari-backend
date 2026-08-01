@@ -2,10 +2,9 @@ const express = require("express");
 const auth = require("../../middlewares/auth");
 const { propertyController } = require("../../controllers");
 const userFileUploadMiddleware = require("../../middlewares/fileUpload");
-const convertHeicToPngMiddleware = require("../../middlewares/converter");
+const cloudinaryUpload = require("../../middlewares/cloudinaryUpload");
 
-const UPLOADS_FOLDER_PROPERTY = "./public/uploads/propertys";
-const uploadProperty = userFileUploadMiddleware(UPLOADS_FOLDER_PROPERTY);
+const uploadProperty = userFileUploadMiddleware();
 
 const router = express.Router();
 
@@ -14,7 +13,7 @@ router
   .post(
     auth("common"),
     uploadProperty.fields([{ name: "images", maxCount: 8 }]),
-    convertHeicToPngMiddleware(UPLOADS_FOLDER_PROPERTY),
+    cloudinaryUpload("propertys"),
     propertyController.createProperty
   );
 
@@ -28,7 +27,7 @@ router
   .post(
     auth("common"),
     uploadProperty.single("image"),
-    convertHeicToPngMiddleware(UPLOADS_FOLDER_PROPERTY),
+    cloudinaryUpload("propertys"),
     propertyController.uploadPropertyImage
   );
 
@@ -42,7 +41,7 @@ router
   .patch(
     auth("common"),
     uploadProperty.fields([{ name: "images", maxCount: 8 }]),
-    convertHeicToPngMiddleware(UPLOADS_FOLDER_PROPERTY),
+    cloudinaryUpload("propertys"),
     propertyController.updateProperty
   )
   .delete(auth("common"), propertyController.deleteProperty);

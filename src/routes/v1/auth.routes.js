@@ -3,9 +3,6 @@ const validate = require('../../middlewares/validate');
 const authValidation = require('../../validations/auth.validation');
 const authController = require('../../controllers/auth.controller');
 const auth = require('../../middlewares/auth');
-const userFileUploadMiddleware = require("../../middlewares/fileUpload");
-const UPLOADS_FOLDER_USERS = "./public/uploads/users";
-const uploadUsers = userFileUploadMiddleware(UPLOADS_FOLDER_USERS);
 
 
 const router = express.Router();

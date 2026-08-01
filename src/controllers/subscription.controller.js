@@ -100,7 +100,7 @@ const subscriptionList = catchAsync(async (req, res) => {
 const takeSubscription = catchAsync(async (req, res) => {
 
   if (req.file) {
-    req.body.screenshot = "/uploads/other/" + req.file.filename;
+    req.body.screenshot = req.file.url;
   }
 
   const result = await subscriptionService.takeSubscriptions(

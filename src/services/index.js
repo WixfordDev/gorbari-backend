@@ -8,3 +8,4 @@ module.exports.contactService = require("./contact.service");
 module.exports.subscriptionService = require('./subscription.service');
 module.exports.transactionService = require('./transaction.service');
 module.exports.paymentGatewayService = require("./paymentGateway.service");
+module.exports.cloudinaryService = require("./cloudinary.service");

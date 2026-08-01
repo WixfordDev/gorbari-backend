@@ -4,10 +4,9 @@ const { checkAccess } = require("../../middlewares/auth");
 const validate = require("../../middlewares/validate");
 const { subscriptionController, transactionController } = require("../../controllers");
 const userFileUploadMiddleware = require("../../middlewares/fileUpload");
-const convertHeicToPngMiddleware = require("../../middlewares/converter");
-const UPLOADS_FOLDER_GATEWAY = "./public/uploads/other";
+const cloudinaryUpload = require("../../middlewares/cloudinaryUpload");
 
-const uploadGateway = userFileUploadMiddleware(UPLOADS_FOLDER_GATEWAY);
+const uploadGateway = userFileUploadMiddleware();
 
 const router = express.Router();
 
@@ -30,8 +29,8 @@ router
   .route("/take")
   .post(
     auth("common"),
-    [uploadGateway.single("screenshot")],
-    convertHeicToPngMiddleware(UPLOADS_FOLDER_GATEWAY),
+    uploadGateway.single("screenshot"),
+    cloudinaryUpload("other"),
     subscriptionController.takeSubscription
   );
 

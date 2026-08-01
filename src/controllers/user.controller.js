@@ -4,7 +4,6 @@ const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
 const { userService } = require("../services");
-const unlinkImages = require("../common/unlinkImage");
 
 const createUser = catchAsync(async (req, res) => {
   const user = await userService.createUser(req.body);
@@ -112,9 +111,8 @@ const updateUser = catchAsync(async (req, res) => {
     req.body.interest = parsedInterest;
   }
   const image = {};
-  console.log(req.file);
   if (req.file) {
-    image.url = "/uploads/users/" + req.file.filename;
+    image.url = req.file.url;
     image.path = req.file.path;
   }
   if (req.file) {
@@ -135,7 +133,7 @@ const updateUser = catchAsync(async (req, res) => {
 
 const updateProfile = catchAsync(async (req, res) => {
   if (req.file) {
-    req.body.profileImage = `/uploads/users/${req.file.filename}`;
+    req.body.profileImage = req.file.url;
   }
 
   // Set fullName if firstName or lastName is provided

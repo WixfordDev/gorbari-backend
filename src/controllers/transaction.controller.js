@@ -9,7 +9,7 @@ const transactionCreate = catchAsync(async (req, res) => {
   req.body.user = req.user.id;
 
   if (req.file) {
-    req.body.screenshot = req.file.filename;
+    req.body.screenshot = req.file.url;
   }
 
   const transaction = await transactionService.createTransaction(req.body);
