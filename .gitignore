@@ -13,5 +13,9 @@ coverage
 
 app.log*
 
-/public
+# User-uploaded files are runtime data and stay out of git, but committed
+# static assets (e.g. the email logo) must ship with the code.
+/public/**
+!/public/images/
+!/public/images/logo.png
 /dist

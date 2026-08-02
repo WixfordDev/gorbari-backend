@@ -3,6 +3,11 @@ const config = require("../config/config");
 const logger = require("../config/logger");
 
 const transport = nodemailer.createTransport(config.email.smtp);
+
+// Logo is served from this app's own public/ folder rather than a third-party
+// host, so it stays available and versioned with the code. Email clients only
+// render absolute URLs, hence the SERVER_URL prefix.
+const LOGO_URL = `${config.serverUrl}/images/logo.png`;
 /* istanbul ignore next */
 if (config.env !== "test") {
   transport
@@ -35,7 +40,7 @@ const sendEmailVerification = async (to, otp) => {
    <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
     <div
         style="max-width: 32rem; margin: 0 auto; background-color: #ffffff; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15); text-align: center;">
-        <img src="https://raw.githubusercontent.com/shadat-hossan/Image-server/refs/heads/main/Ghorbari.png"
+        <img src="${LOGO_URL}"
             alt="Ghorbari" style="max-width: 10rem; margin-bottom: 1.5rem;">
         <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: #1f2937;">Welcome to Ghorbari
         </h1>
@@ -64,7 +69,7 @@ const sendResetPasswordEmail = async (to, otp) => {
        <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
           <div
               style="max-width: 32rem; margin: 0 auto; background-color: #ffffff; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15); text-align: center;">
-              <img src="https://raw.githubusercontent.com/shadat-hossan/Image-server/refs/heads/main/Ghorbari.png"
+              <img src="${LOGO_URL}"
                   alt="Ghorbari" style="max-width: 8rem; margin-bottom: 1.5rem;">
               <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: #1f2937;">Password Reset Request
               </h1>
@@ -96,7 +101,7 @@ const sendContactsUsEmail = async (allData) => {
  <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f9fafb; color: #333;">
   <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);">
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="https://raw.githubusercontent.com/shadat-hossan/Image-server/refs/heads/main/Ghorbari.png" alt="Ghorbari Logo" style="max-width: 100px; margin-bottom: 10px;">
+      <img src="${LOGO_URL}" alt="Ghorbari Logo" style="max-width: 100px; margin-bottom: 10px;">
       <h1 style="font-size: 1.75rem; color: #e6441c; margin: 0;">Contact Us Submission</h1>
     </div>
     <div style="background: linear-gradient(135deg, #e6441c, #f17657); padding: 20px; border-radius: 10px; color: #ffffff; margin-top: 20px;">
@@ -144,7 +149,7 @@ const sendSubAdminInvitationEmail = async (to, password, permissions, fullName) 
   const html = `
   <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
     <div style="max-width: 32rem; margin: 0 auto; background-color: #ffffff; padding: 2rem; border-radius: 0.75rem; box-shadow: 0 10px 20px rgba(0,0,0,0.15); text-align: center;">
-      <img src="https://raw.githubusercontent.com/shadat-hossan/Image-server/refs/heads/main/Ghorbari.png"
+      <img src="${LOGO_URL}"
         alt="Ghorbari" style="max-width: 10rem; margin-bottom: 1.5rem;">
       <h1 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: #1f2937;">Sub-Admin Invitation</h1>
       <p style="color: #4b5563; margin-bottom: 1.5rem;">
