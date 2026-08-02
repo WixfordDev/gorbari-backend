@@ -1,19 +1,23 @@
 const httpStatus = require("http-status");
 const { User } = require("../models");
 const ApiError = require("../utils/ApiError");
+const { generateOneTimeCode } = require("../utils/oneTimeCode");
 const { sendEmailVerification } = require("./email.service");
 
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Email already taken");
   }
-  const oneTimeCode = Math.floor(Math.random() * (999999 - 100000 + 1)) + 100000;
+  const { oneTimeCode, oneTimeCodeExpires } = generateOneTimeCode();
 
-  if (userBody.role === "user" || userBody.role === "agent" || userBody.role === "admin") {
+  const user = await User.create({ ...userBody, oneTimeCode, oneTimeCodeExpires });
 
-    sendEmailVerification(userBody.email, oneTimeCode);
-  }
-  return User.create({ ...userBody, oneTimeCode });
+  // Awaited on purpose: without this code the account cannot be verified, so a
+  // delivery failure has to reach the client instead of leaving them waiting
+  // for an email that will never arrive.
+  await sendEmailVerification(user.email, oneTimeCode);
+
+  return user;
 };
 
 
@@ -87,12 +91,7 @@ const isUpdateUser = async (userId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
   }
 
-  const oneTimeCode =
-    Math.floor(Math.random() * (999999 - 100000 + 1)) + 100000;
-
-  if (updateBody.role === "user" || updateBody.role === "agent" || updateBody.role === "admin") {
-    sendEmailVerification(updateBody.email, oneTimeCode);
-  }
+  const { oneTimeCode, oneTimeCodeExpires } = generateOneTimeCode();
 
   Object.assign(user, updateBody, {
     isDeleted: false,
@@ -100,9 +99,41 @@ const isUpdateUser = async (userId, updateBody) => {
     isEmailVerified: false,
     isResetPassword: false,
     isPhoneNumberVerified: false,
-    oneTimeCode: oneTimeCode,
+    oneTimeCode,
+    oneTimeCodeExpires,
   });
   await user.save();
+
+  // Awaited for the same reason as in createUser: the code is the only way to
+  // finish verifying this account.
+  await sendEmailVerification(user.email, oneTimeCode);
+
+  return user;
+};
+
+/**
+ * Issue a fresh verification code to an account that has not been verified yet.
+ *
+ * Registration is the only other place a verification code is created, so
+ * without this an account whose first email was lost would be permanently
+ * stuck.
+ */
+const resendEmailVerification = async (email) => {
+  const user = await getUserByEmail(email);
+  if (!user || user.isDeleted) {
+    throw new ApiError(httpStatus.NOT_FOUND, "No users found with this email");
+  }
+  if (user.isEmailVerified) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email already verified");
+  }
+
+  const { oneTimeCode, oneTimeCodeExpires } = generateOneTimeCode();
+  user.oneTimeCode = oneTimeCode;
+  user.oneTimeCodeExpires = oneTimeCodeExpires;
+  await user.save();
+
+  await sendEmailVerification(user.email, oneTimeCode);
+
   return user;
 };
 
@@ -113,5 +144,6 @@ module.exports = {
   getUserByEmail,
   updateUserById,
   deleteUserById,
-  isUpdateUser
+  isUpdateUser,
+  resendEmailVerification,
 };

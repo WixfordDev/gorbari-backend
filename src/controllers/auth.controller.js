@@ -2,6 +2,7 @@ const httpStatus = require("http-status");
 const catchAsync = require("../utils/catchAsync");
 const ApiError = require("../utils/ApiError");
 const response = require("../config/response");
+const { generateOneTimeCode } = require("../utils/oneTimeCode");
 const {
   authService,
   userService,
@@ -68,18 +69,6 @@ const login = catchAsync(async (req, res) => {
   }
   const user = await authService.loginUserWithEmailAndPassword(email, password);
 
-  setTimeout(async () => {
-    try {
-      user.oneTimeCode = null;
-      user.isResetPassword = false;
-      await user.save();
-      console.log("oneTimeCode reset to null after 3 minute");
-    } catch (error) {
-      ApiError;
-      console.error("Error updating oneTimeCode:", error);
-    }
-  }, 180000); // 3 minute in milliseconds
-
   const tokens = await tokenService.generateAuthTokens(user);
   res.status(httpStatus.OK).json(
     response({
@@ -122,15 +111,14 @@ const forgotPassword = catchAsync(async (req, res) => {
   //   );
   // }
   // Generate OTC (One-Time Code)
-  const oneTimeCode =
-    Math.floor(Math.random() * (999999 - 100000 + 1)) + 100000;
+  const { oneTimeCode, oneTimeCodeExpires } = generateOneTimeCode();
 
   // Store the OTC and its expiration time in the database
   user.oneTimeCode = oneTimeCode;
+  user.oneTimeCodeExpires = oneTimeCodeExpires;
   user.isResetPassword = true;
   await user.save();
 
-  //console.log("oneTimeCode", user);
   await emailService.sendResetPasswordEmail(req.body.email, oneTimeCode);
   res.status(httpStatus.OK).json(
     response({
@@ -167,9 +155,15 @@ const changePassword = catchAsync(async (req, res) => {
 });
 
 const sendVerificationEmail = catchAsync(async (req, res) => {
-  // const verifyEmailToken = await tokenService.generateVerifyEmailToken(req.user);
-  // await emailService.sendVerificationEmail(req.user.email, verifyEmailToken);
-  // res.status(httpStatus.OK).send();
+  await userService.resendEmailVerification(req.body.email);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Verification code sent. Please check your email",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: {},
+    })
+  );
 });
 
 const verifyEmail = catchAsync(async (req, res) => {
