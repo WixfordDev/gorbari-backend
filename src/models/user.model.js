@@ -88,6 +88,11 @@ const userSchema = mongoose.Schema(
       required: false,
       default: null
     },
+    oneTimeCodeExpires: {
+      type: Date,
+      required: false,
+      default: null
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

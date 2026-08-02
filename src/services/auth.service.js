@@ -4,6 +4,7 @@ const userService = require("./user.service");
 const Token = require("../models/token.model");
 const ApiError = require("../utils/ApiError");
 const { tokenTypes } = require("../config/tokens");
+const { isOneTimeCodeExpired } = require("../utils/oneTimeCode");
 
 const loginUserWithEmailAndPassword = async (email, password) => {
   const user = await userService?.getUserByEmail(email);
@@ -93,28 +94,27 @@ const changePassword = async (reqUser, reqBody) => {
 
 const verifyEmail = async (reqBody, reqQuery) => {
   const { email, code: oneTimeCode } = reqBody;
-  console.log("reqBody", email);
-  console.log("reqQuery", oneTimeCode);
   const user = await userService.getUserByEmail(email);
 
-  // if(user.oneTimeCode === 'verified'){
-  //   throw new ApiError(
-  //     httpStatus.BAD_REQUEST,
-  //     "try 3 minute later"
-  //   );
-  // }
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, "User does not exist");
   } else if (user.oneTimeCode === null) {
     throw new ApiError(httpStatus.BAD_REQUEST, "OTP expired");
-  } else if (oneTimeCode != user.oneTimeCode) {
+  } else if (isOneTimeCodeExpired(user.oneTimeCodeExpires)) {
+    // The code is past its lifetime. Clear it so a stale value can never be
+    // replayed, and tell the user to request a new one.
+    user.oneTimeCode = null;
+    user.oneTimeCodeExpires = null;
+    await user.save();
+    throw new ApiError(httpStatus.BAD_REQUEST, "OTP expired. Please request a new code.");
+  } else if (String(oneTimeCode) !== String(user.oneTimeCode)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP");
   } else if (user.isEmailVerified && !user.isResetPassword) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Email already verified");
   } else {
     user.isEmailVerified = true;
     user.oneTimeCode = null;
-    // user.isResetPassword = false;
+    user.oneTimeCodeExpires = null;
     await user.save();
     return user;
   }

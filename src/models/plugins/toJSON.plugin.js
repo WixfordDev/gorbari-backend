@@ -35,6 +35,7 @@ const toJSON = (schema) => {
       delete ret.isDeleted;
       delete ret.isBlocked;
       delete ret.oneTimeCode;
+      delete ret.oneTimeCodeExpires;
       delete ret.isEmailVerified;
       delete ret.isResetPassword;
       delete ret.securitySettings;
