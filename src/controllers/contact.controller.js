@@ -63,8 +63,15 @@ const getContacts = catchAsync(async (req, res) => {
     "phoneNumber",
     "address",
     "type",
+    // Lets the admin lead list separate purchase requests from general
+    // questions, and a single term search across name and email.
+    "intent",
+    "search",
   ]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
+  // Newest first: a lead list is only useful if the most recent enquiry is at
+  // the top, and paginate defaults to insertion order without this.
+  options.sortBy = options.sortBy || "createdAt:desc";
   const contacts = await contactService.getAllcontact(filter, options);
   res.status(httpStatus.OK).json(
     response({
@@ -83,9 +90,12 @@ const getSelfContacts = catchAsync(async (req, res) => {
     "phoneNumber",
     "address",
     "type",
+    "intent",
+    "search",
   ]);
 
   const options = pick(req.query, ["sortBy", "limit", "page"]);
+  options.sortBy = options.sortBy || "createdAt:desc";
   const user = req.user;
 
   if (user.role !== "admin") {

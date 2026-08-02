@@ -4,6 +4,15 @@ const { Contact, Property } = require("../models");
 const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 
+/**
+ * Neutralise regex metacharacters in a user-supplied search term.
+ *
+ * Filter values are interpolated straight into a $regex, so without this a term
+ * like "a{99999}" or a long alternation becomes a pathological pattern the
+ * database has to evaluate against every document.
+ */
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // Create a new contact
 const createContacts = async (data) => {
   const newContact = await Contact.create(data);
@@ -53,22 +62,32 @@ const getAllcontact = async (filter, options, user) => {
     query.propertyWoner = user.id;
   }
 
-  const searchableFields = [
-    "fullName",
-    "email",
-    "type",
-    "phoneNumber",
-    "address",
-  ];
+  // Partial, case-insensitive matching for free-text fields.
+  const searchableFields = ["fullName", "email", "phoneNumber", "address"];
+  // Enums must match exactly. Regex-matching `type` meant a filter of "general"
+  // could not be distinguished from any value containing it, and left the door
+  // open to a caller passing a pattern instead of a value.
+  const exactFields = ["type", "intent"];
 
   for (const key in filter) {
     if (!filter[key]) continue;
 
+    if (key === "search") continue;
+
     if (searchableFields.includes(key)) {
-      query[key] = { $regex: filter[key], $options: "i" };
-    } else {
+      query[key] = { $regex: escapeRegex(filter[key]), $options: "i" };
+    } else if (exactFields.includes(key)) {
       query[key] = filter[key];
     }
+  }
+
+  // A single term that should match either the sender's name or their email.
+  // Passing fullName and email separately ANDs them, so a search for a name
+  // would also require that name to appear in the email address and return
+  // nothing.
+  if (filter.search) {
+    const pattern = { $regex: escapeRegex(filter.search), $options: "i" };
+    query.$or = [{ fullName: pattern }, { email: pattern }];
   }
 
   options.populate = [
