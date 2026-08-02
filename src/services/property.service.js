@@ -181,8 +181,10 @@ const queryProperties = async (filter, options) => {
       createdBy: {
         _id: "$createdBy._id",
         fullName: "$createdBy.fullName",
-        email: "$createdBy.email",
         profileImage: "$createdBy.profileImage",
+        // Lets a listing card label the lister correctly rather than assuming
+        // every property was posted by an agent.
+        role: "$createdBy.role",
         subscription: "$createdBy.subscription"
       },
     },
@@ -345,6 +347,14 @@ const queryPropertiesForAgent = async (filter, options, userId) => {
   };
 };
 
+// Fields exposed for the agent who listed a property. The detail page is
+// public, so contact details are deliberately excluded — an enquiry goes
+// through POST /contact/for-property rather than handing out an address for
+// scrapers to harvest. role is included so the page can label the person
+// correctly instead of assuming "Agent", and the name fields are all included
+// because fullName is nullable on older accounts.
+const AGENT_PUBLIC_FIELDS = "fullName firstName lastName profileImage role";
+
 /**
  * Look up a property by either its slug or its Mongo id.
  *
@@ -361,14 +371,14 @@ const getPropertyByIdOrSlug = async (idOrSlug) => {
 
   return Property.findOne({ $or: or, isDeleted: false }).populate(
     "createdBy",
-    "fullName profileImage"
+    AGENT_PUBLIC_FIELDS
   );
 };
 
 const getPropertyById = async (id) => {
   return Property.findOne({ _id: id, isDeleted: false }).populate(
     "createdBy",
-    "fullName profileImage"
+    AGENT_PUBLIC_FIELDS
   );
 };
 
