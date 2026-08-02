@@ -143,34 +143,140 @@ const sendResetPasswordEmail = async (to, otp) => {
   await sendEmail(to, subject, html);
 };
 
+// Labels for the enquiry intent captured on the contact record. Kept here so
+// the email reads as a human sentence rather than echoing the raw enum.
+const INTENT_LABELS = {
+  buy: "wants to buy",
+  rent: "wants to rent",
+  lease: "wants to lease",
+  auction: "is interested in the auction",
+  visit: "wants to schedule a visit",
+  general: "sent an enquiry about",
+};
+
+/**
+ * Escape values interpolated into email HTML.
+ *
+ * The message body is free text supplied by whoever submitted the form, so
+ * without this a submission containing markup would be rendered as HTML in the
+ * recipient's inbox.
+ */
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+/**
+ * Flatten a value for use inside a header line such as Subject.
+ *
+ * Newlines are stripped because a header break is how header injection works;
+ * nodemailer encodes headers, but not relying on that is cheap. Length is capped
+ * so a long title cannot push the subject into mail-client truncation.
+ */
+const headerSafe = (value, max = 90) => {
+  const clean = String(value ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+};
+
+const detailRow = (icon, label, value) => {
+  if (!value) return "";
+  return `
+      <tr>
+        <td style="padding: 8px 0; color: #6b7280; font-size: 0.9rem; white-space: nowrap; vertical-align: top;">
+          <span style="margin-right: 6px;">${icon}</span>${escapeHtml(label)}
+        </td>
+        <td style="padding: 8px 0 8px 16px; color: #111827; font-size: 0.95rem; font-weight: 500;">
+          ${escapeHtml(value)}
+        </td>
+      </tr>`;
+};
+
+/**
+ * Notify the recipient of a contact submission.
+ *
+ * Two shapes arrive here: a property enquiry, which goes to the agent who
+ * listed it, and a site-wide contact form submission, which goes to the address
+ * in CONTACT_US_EMAIL. The copy differs because an agent needs to know which
+ * property and what the sender wants, while a general submission has neither.
+ */
 const sendContactsUsEmail = async (allData) => {
-  const to = allData.propertyOwnerEmail ? allData.propertyOwnerEmail : process.env.CONTACT_US_EMAIL;
-  const subject = `Contact Us Email - ${allData.fullName} from Doctor Appointment e-clinic`;
+  const isPropertyEnquiry = allData.type === "property";
+  const to = allData.propertyOwnerEmail || config.email.contactUsRecipient;
+
+  if (!to) {
+    logger.warn("No recipient for contact submission; set CONTACT_US_EMAIL");
+    return;
+  }
+
+  const senderName = allData.fullName || "Someone";
+  const intentLabel = INTENT_LABELS[allData.intent] || INTENT_LABELS.general;
+
+  const subject = isPropertyEnquiry
+    ? `New enquiry: ${headerSafe(allData.propertyTitle || "your property", 60)} — ${headerSafe(senderName, 40)}`
+    : `New contact form submission from ${headerSafe(senderName, 60)}`;
+
+  const heading = isPropertyEnquiry
+    ? `${escapeHtml(senderName)} ${intentLabel} ${escapeHtml(allData.propertyTitle || "your property")}`
+    : `New message from ${escapeHtml(senderName)}`;
+
+  const greeting = isPropertyEnquiry && allData.propertyOwnerName
+    ? `<p style="color:#4b5563; margin: 0 0 20px;">Hello ${escapeHtml(allData.propertyOwnerName)}, you have a new enquiry on one of your listings.</p>`
+    : "";
+
+  // Deep link so the agent can open the listing straight from the email. Falls
+  // back to omitting the row when the slug is unknown.
+  const propertyLink = isPropertyEnquiry && allData.propertySlug
+    ? `${config.websiteUrl}/properties/${allData.propertySlug}`
+    : null;
+
   const html = `
- <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f9fafb; color: #333;">
-  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);">
-    <div style="text-align: center; margin-bottom: 20px;">
-      <img src="${LOGO_URL}" alt="Ghorbari Logo" style="max-width: 100px; margin-bottom: 10px;">
-      <h1 style="font-size: 1.75rem; color: #e6441c; margin: 0;">Contact Us Submission</h1>
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
     </div>
-    <div style="background: linear-gradient(135deg, #e6441c, #f17657); padding: 20px; border-radius: 10px; color: #ffffff; margin-top: 20px;">
-      <h2 style="font-size: 1.5rem; margin: 0; text-align: center;">New Message from ${allData.fullName}</h2>
+
+    <div style="background: linear-gradient(135deg, #FF6625, #d3541d); padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">${heading}</h2>
     </div>
-    <div style="padding: 20px 0;">
-      <p style="font-size: 1.125rem; line-height: 1.6; margin-bottom: 15px;">
-        <strong style="color: #e6441c;"><i style="margin-right: 8px;">📧</i>Email Address:</strong> ${allData.email}
-      </p>
-      <p style="font-size: 1.125rem; line-height: 1.6; margin-bottom: 15px;">
-        <strong style="color: #e6441c;"><i style="margin-right: 8px;">📞</i>Phone:</strong> ${allData.phoneNumber}
-      </p>
-      <p sty
-      <p style="font-size: 1.125rem; line-height: 1.6; margin-bottom: 15px;">
-        <strong style="color: #e6441c;"><i style="margin-right: 8px;">💬</i>Message:</strong> ${allData.message}
-      </p>
+
+    <div style="padding: 24px 0 8px;">
+      ${greeting}
+      <table style="width: 100%; border-collapse: collapse;">
+        ${detailRow("👤", "Name", senderName)}
+        ${detailRow("📧", "Email", allData.email)}
+        ${detailRow("📞", "Phone", allData.phoneNumber)}
+        ${isPropertyEnquiry ? detailRow("🏠", "Property", allData.propertyTitle) : ""}
+      </table>
     </div>
-    <div style="text-align: center; padding: 20px; background-color: #f3f4f6; border-radius: 10px; margin-top: 30px;">
-      <p style="font-size: 0.875rem; color: #555;">
-        This email was sent from the "Contact Us" form on the Ghorbari website.
+
+    <div style="margin-top: 16px; padding: 20px; background-color: #f9fafb; border-left: 4px solid #FF6625; border-radius: 8px;">
+      <p style="margin: 0 0 8px; color: #6b7280; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Message</p>
+      <p style="margin: 0; color: #111827; font-size: 1rem; line-height: 1.6; white-space: pre-line;">${escapeHtml(allData.message)}</p>
+    </div>
+
+    ${
+      propertyLink
+        ? `<div style="text-align: center; margin-top: 28px;">
+      <a href="${propertyLink}" style="display: inline-block; background: linear-gradient(135deg, #FF6625, #d3541d); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600;">View listing</a>
+    </div>`
+        : ""
+    }
+
+    ${
+      allData.email
+        ? `<p style="text-align: center; color: #6b7280; font-size: 0.85rem; margin-top: 24px;">
+      Reply directly to <a href="mailto:${escapeHtml(allData.email)}" style="color: #FF6625;">${escapeHtml(allData.email)}</a> to respond.
+    </p>`
+        : ""
+    }
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">
+        ${isPropertyEnquiry ? "Sent because someone enquired about your listing on Ghorbari." : "Sent from the contact form on Ghorbari."}
       </p>
     </div>
   </div>

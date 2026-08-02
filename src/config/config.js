@@ -8,6 +8,10 @@ const envVarsSchema = Joi.object()
   .keys({
     NODE_ENV: Joi.string().valid('production', 'development', 'test').required(),
     PORT: Joi.number().default(3000),
+    WEBSITE_URL: Joi.string()
+      .uri()
+      .default('http://localhost:8000')
+      .description('public base url of the customer website, used for links in emails'),
     MONGODB_URL: Joi.string().required().description('Mongo DB url'),
     JWT_SECRET: Joi.string().required().description('JWT secret key'),
     JWT_ACCESS_EXPIRATION_MINUTES: Joi.number().default(30).description('minutes after which access tokens expire'),
@@ -26,6 +30,9 @@ const envVarsSchema = Joi.object()
     SMTP_USERNAME: Joi.string().description('username for email server'),
     SMTP_PASSWORD: Joi.string().description('password for email server'),
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
+    CONTACT_US_EMAIL: Joi.string()
+      .email()
+      .description('where site-wide contact form submissions are delivered'),
     CLOUDINARY_CLOUD_NAME: Joi.string().description('Cloudinary cloud name'),
     CLOUDINARY_API_KEY: Joi.string().description('Cloudinary API key'),
     CLOUDINARY_API_SECRET: Joi.string().description('Cloudinary API secret'),
@@ -41,6 +48,7 @@ if (error) {
 module.exports = {
   env: envVars.NODE_ENV,
   port: envVars.PORT,
+  websiteUrl: envVars.WEBSITE_URL.replace(/\/+$/, ''),
   mongoose: {
     url: envVars.MONGODB_URL + (envVars.NODE_ENV === 'test' ? '-test' : ''),
     options: {
@@ -67,6 +75,7 @@ module.exports = {
       },
     },
     from: envVars.EMAIL_FROM,
+    contactUsRecipient: envVars.CONTACT_US_EMAIL,
   },
   cloudinary: {
     cloudName: envVars.CLOUDINARY_CLOUD_NAME,
