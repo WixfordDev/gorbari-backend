@@ -1,6 +1,8 @@
 const nodemailer = require("nodemailer");
+const httpStatus = require("http-status");
 const config = require("../config/config");
 const logger = require("../config/logger");
+const ApiError = require("../utils/ApiError");
 
 const transport = nodemailer.createTransport(config.email.smtp);
 
@@ -26,15 +28,32 @@ const sendEmail = async (to, subject, html) => {
   try {
     await transport.sendMail(msg);
   } catch (err) {
-    // Email delivery is best-effort: never let an SMTP failure crash the
-    // process (fire-and-forget senders) or fail the API request (awaited
-    // senders). Log it so the issue is visible in the server output.
-    logger.error("Failed to send email: %s", err.message || err);
+    // Log the technical detail for operators, then surface a generic failure to
+    // the caller so an API request never reports success for mail that was
+    // never accepted by the SMTP server.
+    logger.error("Failed to send email to %s: %s", to, err.message || err);
+    throw new ApiError(
+      httpStatus.BAD_GATEWAY,
+      "Could not send the email right now. Please try again in a moment."
+    );
   }
 };
 
+/**
+ * Send an email without making the caller wait for, or depend on, delivery.
+ *
+ * Use this only where the email is a side effect that must not fail the
+ * surrounding operation (e.g. notifying a property owner about an enquiry).
+ * The rejection is always handled here, so a dropped email can never surface
+ * as an unhandled promise rejection and take the process down.
+ */
+const sendEmailInBackground = (sendPromiseFactory) => {
+  Promise.resolve()
+    .then(sendPromiseFactory)
+    .catch((err) => logger.error("Background email failed: %s", err.message || err));
+};
+
 const sendEmailVerification = async (to, otp) => {
-  console.log("sendEmailVerification", to, otp);
   const subject = "User verification code";
   const html = `
    <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
@@ -63,7 +82,6 @@ const sendEmailVerification = async (to, otp) => {
 };
 
 const sendResetPasswordEmail = async (to, otp) => {
-  console.log("Password Reset Email", to, otp);
   const subject = "Password Reset Email";
   const html = `
        <body style="background-color: #f3f4f6; padding: 2rem; font-family: Arial, sans-serif; color: #333;">
@@ -175,21 +193,11 @@ const sendSubAdminInvitationEmail = async (to, password, permissions, fullName) 
   await sendEmail(to, subject, html);
 };
 
-const sendVerificationEmail = async (to, token) => {
-  const subject = "Email Verification";
-  // replace this url with the link to the email verification page of your front-end app
-  const verificationEmailUrl = `http://link-to-app/verify-email?token=${token}`;
-  const text = `Dear user,
-To verify your email, click on this link: ${verificationEmailUrl}
-If you did not create an account, then ignore this email.`;
-  await sendEmail(to, subject, text);
-};
-
 module.exports = {
   transport,
   sendEmail,
+  sendEmailInBackground,
   sendResetPasswordEmail,
-  sendVerificationEmail,
   sendEmailVerification,
   sendContactsUsEmail,
   sendSubAdminInvitationEmail,

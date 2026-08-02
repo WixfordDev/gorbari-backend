@@ -1,21 +1,25 @@
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 const { Contact } = require("../models");
-const { sendContactsUsEmail } = require("./email.service");
+const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 
 // Create a new contact
 const createContacts = async (data) => {
   const newContact = await Contact.create(data);
 
+  // The enquiry is already persisted, so a mail failure must not fail the
+  // request. Notify in the background and let the service log any problem.
   if (data.type === "property") {
     const propertyWoner = await userService.getUserById(data.propertyWoner);
-    sendContactsUsEmail({
-      ...data,
-      propertyOwnerEmail: propertyWoner.email,
-    });
+    sendEmailInBackground(() =>
+      sendContactsUsEmail({
+        ...data,
+        propertyOwnerEmail: propertyWoner.email,
+      })
+    );
   } else {
-    sendContactsUsEmail(data);
+    sendEmailInBackground(() => sendContactsUsEmail(data));
   }
 
   return newContact;
