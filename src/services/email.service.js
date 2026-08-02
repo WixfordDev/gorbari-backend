@@ -1,15 +1,43 @@
 const nodemailer = require("nodemailer");
 const httpStatus = require("http-status");
+const fs = require("fs");
+const path = require("path");
 const config = require("../config/config");
 const logger = require("../config/logger");
 const ApiError = require("../utils/ApiError");
 
 const transport = nodemailer.createTransport(config.email.smtp);
 
-// Logo is served from this app's own public/ folder rather than a third-party
-// host, so it stays available and versioned with the code. Email clients only
-// render absolute URLs, hence the SERVER_URL prefix.
-const LOGO_URL = `${config.serverUrl}/images/logo.png`;
+// The logo travels inside the message as an inline attachment referenced by
+// Content-ID, rather than as a link to this server.
+//
+// A linked image cannot work here: Gmail and most webmail clients fetch images
+// through their own proxy, so the request comes from the provider's servers and
+// never from the recipient. That makes any localhost URL unreachable by
+// definition, and even a public one leaves the logo dependent on this server
+// still being reachable whenever the mail happens to be opened. Embedding it
+// renders offline, needs no public URL, and dodges the proxy entirely.
+const LOGO_CID = "ghorbari-logo";
+const LOGO_URL = `cid:${LOGO_CID}`;
+const LOGO_PATH = path.join(__dirname, "../../public/images/logo.png");
+
+// Read once at startup instead of on every send. A missing file degrades to a
+// logo-less email rather than breaking delivery.
+let logoAttachment;
+try {
+  logoAttachment = {
+    filename: "logo.png",
+    content: fs.readFileSync(LOGO_PATH),
+    contentType: "image/png",
+    cid: LOGO_CID,
+    // Without this the logo also shows up as a downloadable attachment.
+    contentDisposition: "inline",
+  };
+} catch (err) {
+  logger.warn("Email logo missing at %s, sending without it: %s", LOGO_PATH, err.message);
+  logoAttachment = null;
+}
+
 /* istanbul ignore next */
 if (config.env !== "test") {
   transport
@@ -25,6 +53,9 @@ if (config.env !== "test") {
 
 const sendEmail = async (to, subject, html) => {
   const msg = { from: config.email.from, to, subject, html };
+  if (logoAttachment) {
+    msg.attachments = [logoAttachment];
+  }
   try {
     await transport.sendMail(msg);
   } catch (err) {
