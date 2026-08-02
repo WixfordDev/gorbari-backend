@@ -1,9 +1,15 @@
 const httpStatus = require("http-status");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
-const { contactService, subscriptionService } = require("../services");
+const { contactService } = require("../services");
 const pick = require("../utils/pick");
 const ApiError = require("../utils/ApiError");
+const {
+  LEAD_ACCESS,
+  LEAD_ACCESS_MESSAGES,
+  resolveLeadAccess,
+  redactLead,
+} = require("../utils/leadAccess");
 
 const createContact = catchAsync(async (req, res) => {
   if (!req.body.type) {
@@ -46,12 +52,28 @@ const getContact = catchAsync(async (req, res) => {
       })
     );
   }
+
+  // This route is open to agents as well as admins, so without an ownership
+  // check any agent could read any other agent's leads by guessing an id.
+  const isOwner = String(contact.propertyWoner?.id || contact.propertyWoner) === String(req.user.id);
+  if (req.user.role !== "admin" && !isOwner) {
+    throw new ApiError(httpStatus.FORBIDDEN, "This enquiry is not yours");
+  }
+
+  // Redacting the list but not the single-lead route would leave the paywall
+  // trivially bypassable: fetch the ids from the locked list, then request each
+  // one individually for the full sender details.
+  const access = await resolveLeadAccess(req.user);
+  const isLocked = access !== LEAD_ACCESS.GRANTED;
+
   res.status(httpStatus.OK).json(
     response({
       message: "Contact retrieved",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: contact,
+      data: isLocked
+        ? { ...redactLead(contact), leadAccess: access, lockReason: LEAD_ACCESS_MESSAGES[access] }
+        : contact,
     })
   );
 });
@@ -98,41 +120,42 @@ const getSelfContacts = catchAsync(async (req, res) => {
   options.sortBy = options.sortBy || "createdAt:desc";
   const user = req.user;
 
-  if (user.role !== "admin") {
-    if (!user.subscription || !user.subscription.isSubscriptionTaken) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "You don't have an active subscription. Please upgrade your plan."
-      );
-    }
+  const access = await resolveLeadAccess(user);
+  const isLocked = access !== LEAD_ACCESS.GRANTED;
 
-    if (new Date(user.subscription.subscriptionExpirationDate) < new Date()) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Your subscription has expired. Please renew your plan."
-      );
-    }
-
-    const subscription = await subscriptionService.getSubscriptionById(
-      user.subscription.subscriptionId
+  // Previously this threw 403 when the subscription check failed, so an agent
+  // without a plan could not tell whether they had any enquiries at all — the
+  // page was simply an error. The request now succeeds and the leads come back
+  // redacted, which lets the agent see that interest exists while keeping the
+  // details behind the paywall.
+  if (isLocked) {
+    // A locked agent cannot search or filter on fields they are not allowed to
+    // read; honouring those filters would leak the same information one query at
+    // a time (searching an email and counting results reveals the email).
+    ["fullName", "email", "phoneNumber", "address", "search"].forEach(
+      (key) => delete filter[key]
     );
-
-    if (!subscription || subscription.isViewsContact === false) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Your current subscription does not allow viewing contacts."
-      );
-    }
   }
 
   const contacts = await contactService.getAllcontact(filter, options, user);
+
+  const payload = isLocked
+    ? { ...contacts, results: contacts.results.map(redactLead) }
+    : contacts;
 
   res.status(httpStatus.OK).json(
     response({
       message: "Contacts retrieved successfully",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: contacts,
+      data: {
+        ...payload,
+        // The client needs to know why detail is missing so it can offer the
+        // right remedy: subscribe, renew, or upgrade.
+        leadAccess: access,
+        isLocked,
+        lockReason: isLocked ? LEAD_ACCESS_MESSAGES[access] : null,
+      },
     })
   );
 });
