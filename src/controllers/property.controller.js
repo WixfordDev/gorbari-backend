@@ -271,7 +271,13 @@ const getPropertiesAdvanced = catchAsync(async (req, res) => {
 });
 
 const getPropertyById = catchAsync(async (req, res) => {
-  const property = await propertyService.getPropertyById(req.params.propertyId);
+  // Accepts a slug or an id: slugs are the canonical public URL, ids stay
+  // resolvable for links shared before the slug migration.
+  const property = await propertyService.getPropertyByIdOrSlug(req.params.propertyId);
+
+  if (!property) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
+  }
 
   property.views += 1;
 

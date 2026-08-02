@@ -8,6 +8,7 @@
     "build": "webpack --mode=production",
     "seed": "node src/utils/seed/index.js",
     "seed:reset": "node src/utils/seed/index.js --reset",
+    "backfill:slugs": "node src/utils/seed/backfillPropertySlugs.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Md. Shadat Hossain",

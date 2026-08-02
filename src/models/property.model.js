@@ -13,6 +13,20 @@ const propertySchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    // URL identifier derived from the title at creation time. Deliberately not
+    // regenerated when the title changes: the slug is the public URL, so a
+    // stable value keeps inbound links and accumulated search ranking intact.
+    // Sparse so the unique index tolerates the pre-migration documents that
+    // have no slug yet.
+    slug: {
+      type: String,
+      required: false,
+      unique: true,
+      sparse: true,
+      index: true,
+      trim: true,
+      default: null,
+    },
     description: {
       type: String,
       trim: true,

@@ -2,21 +2,48 @@ const httpStatus = require("http-status");
 const { Property } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
+const { buildUniqueSlug } = require("../utils/slug");
+
+// Number of times a create is retried when the unique slug index rejects the
+// insert. A retry only happens when a concurrent request claimed the same slug
+// between our uniqueness check and the insert, so the window is tiny and a
+// couple of attempts is ample.
+const SLUG_RETRY_LIMIT = 3;
+
+const slugExists = async (slug) => Boolean(await Property.exists({ slug }));
 
 const createProperty = async (propertyBody) => {
   // Calculate 10% commission from price
   if (propertyBody.price) {
     const commissionPercentage = 10;
     const commissionAmount = propertyBody.price * (commissionPercentage / 100);
-    
+
     propertyBody.commission = {
       percentage: commissionPercentage,
       amount: commissionAmount,
       status: "pending",
     };
   }
-  
-  return Property.create(propertyBody);
+
+  // The slug is server-derived from the title, so ignore any client-supplied
+  // value rather than letting a request pick its own URL.
+  const { slug: _ignoredSlug, ...body } = propertyBody;
+
+  // buildUniqueSlug only rules out slugs that exist when it runs. Two
+  // simultaneous creates with the same title can therefore both settle on the
+  // same candidate, and the unique index rejects the loser — retry with a fresh
+  // suffix instead of surfacing a duplicate-key error.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const slug = await buildUniqueSlug(body.title, slugExists);
+      return await Property.create({ ...body, slug });
+    } catch (err) {
+      const isDuplicateSlug = err.code === 11000 && err.keyPattern && err.keyPattern.slug;
+      if (!isDuplicateSlug || attempt >= SLUG_RETRY_LIMIT) {
+        throw err;
+      }
+    }
+  }
 };
 
 const queryProperties = async (filter, options) => {
@@ -114,6 +141,7 @@ const queryProperties = async (filter, options) => {
   pipeline.push({
     $project: {
       title: 1,
+      slug: 1,
       description: 1,
       type: 1,
       price: 1,
@@ -126,6 +154,10 @@ const queryProperties = async (filter, options) => {
       catagory: 1,
       isBosted: 1,
       createdAt: 1,
+      // Exposed so the website's sitemap can advertise a truthful <lastmod>.
+      // Without it every entry would claim "just modified" and search engines
+      // learn to ignore the field.
+      updatedAt: 1,
       location: 1,
       images: 1,
       mapLink: 1,
@@ -313,6 +345,26 @@ const queryPropertiesForAgent = async (filter, options, userId) => {
   };
 };
 
+/**
+ * Look up a property by either its slug or its Mongo id.
+ *
+ * Slug URLs are canonical, but ids stay resolvable so links shared before the
+ * slug migration keep working. A 24-character hex string is treated as an id;
+ * anything else can only be a slug. Slugs are matched first because that is the
+ * common case, and a real slug can never look like an ObjectId.
+ */
+const getPropertyByIdOrSlug = async (idOrSlug) => {
+  const or = [{ slug: idOrSlug }];
+  if (mongoose.Types.ObjectId.isValid(idOrSlug) && /^[a-f\d]{24}$/i.test(idOrSlug)) {
+    or.push({ _id: idOrSlug });
+  }
+
+  return Property.findOne({ $or: or, isDeleted: false }).populate(
+    "createdBy",
+    "fullName profileImage"
+  );
+};
+
 const getPropertyById = async (id) => {
   return Property.findOne({ _id: id, isDeleted: false }).populate(
     "createdBy",
@@ -326,7 +378,12 @@ const updatePropertyById = async (propertyId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
   }
 
-  Object.assign(property, updateBody);
+  // The slug is the property's public URL and is frozen after creation, so it is
+  // dropped here even when the title changes. Changing it would break every
+  // link already pointing at this property.
+  const { slug: _ignoredSlug, ...safeUpdate } = updateBody;
+
+  Object.assign(property, safeUpdate);
   await property.save();
   return property;
 };
@@ -382,6 +439,7 @@ module.exports = {
   createProperty,
   queryProperties,
   getPropertyById,
+  getPropertyByIdOrSlug,
   updatePropertyById,
   uploadPropertyImage,
   deletePropertyImage,
