@@ -1,6 +1,6 @@
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
-const { Contact } = require("../models");
+const { Contact, Property } = require("../models");
 const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 
@@ -11,11 +11,22 @@ const createContacts = async (data) => {
   // The enquiry is already persisted, so a mail failure must not fail the
   // request. Notify in the background and let the service log any problem.
   if (data.type === "property") {
-    const propertyWoner = await userService.getUserById(data.propertyWoner);
+    // The property detail page shows an inquiry count that was previously only
+    // ever set by the seeder, so it never moved in response to real enquiries.
+    // $inc rather than save() to avoid clobbering concurrent view/favorite
+    // counter updates on the same document.
+    await Property.updateOne({ _id: data.property }, { $inc: { inquiries: 1 } });
+
+    const propertyOwner = await userService.getUserById(data.propertyWoner);
+    const property = await Property.findById(data.property).select("title slug");
+
     sendEmailInBackground(() =>
       sendContactsUsEmail({
         ...data,
-        propertyOwnerEmail: propertyWoner.email,
+        propertyOwnerEmail: propertyOwner?.email,
+        propertyOwnerName: propertyOwner?.fullName,
+        propertyTitle: property?.title,
+        propertySlug: property?.slug,
       })
     );
   } else {
@@ -67,11 +78,14 @@ const getAllcontact = async (filter, options, user) => {
     },
     {
       path: "user",
-      select: "fullName profileImage email",
+      select: "fullName profileImage email phoneNumber",
     },
     {
+      // "category" was a typo for the schema's misspelled "catagory", so this
+      // select silently returned neither. slug is added so a lead can link
+      // straight to the property.
       path: "property",
-      select: "title category type images",
+      select: "title slug catagory type images",
     },
   ];
 

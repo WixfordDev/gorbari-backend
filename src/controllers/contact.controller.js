@@ -10,25 +10,24 @@ const createContact = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "type is required");
   }
 
-  if (req.body.fullName) {
-    req.body.fullName = req.body.fullName;
-  } else if (req.body.firstName && req.body.lastName) {
-    req.body.firstName = req.body.firstName;
-    req.body.lastName = req.body.lastName || "";
-    req.body.fullName = `${req.body.firstName} ${req.body.lastName}`;
+  if (!req.body.fullName && req.body.firstName) {
+    req.body.fullName = `${req.body.firstName} ${req.body.lastName || ""}`.trim();
   }
 
   if (req.user) {
     req.body.user = req.user.id;
-    req.body.fullName = req.user.fullName;
+    req.body.fullName = req.user.fullName || req.body.fullName;
+    // Carried over from the account so the notification email can identify and
+    // reply to the sender. Previously only the name was copied, which is why
+    // those emails rendered "Email Address: undefined".
+    req.body.email = req.user.email;
+    req.body.phoneNumber = req.body.phoneNumber || req.user.phoneNumber;
   }
-
-  console.log(req.body);
 
   const contact = await contactService.createContacts(req.body);
   res.status(httpStatus.CREATED).json(
     response({
-      message: `${contact.fullName} successfully sent a message`,
+      message: "Your message has been sent successfully",
       status: "OK",
       statusCode: httpStatus.CREATED,
       data: {},
