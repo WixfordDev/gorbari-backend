@@ -35,7 +35,17 @@ const createPropertyContact = {
   }),
 };
 
+const updateContactStatus = {
+  params: Joi.object().keys({
+    contactId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    status: Joi.string().valid("new", "seen", "replied").required(),
+  }),
+};
+
 module.exports = {
   createContact,
   createPropertyContact,
+  updateContactStatus,
 };

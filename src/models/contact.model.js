@@ -79,6 +79,15 @@ const contactSchema = mongoose.Schema(
       required: true,
       default: "general",
     },
+    // Follow-up state for an agent's workflow. Defaults to new so existing
+    // records read as untouched, "seen" when the agent opens the enquiry, and
+    // "replied" when they confirm they have responded. Not derived, because an
+    // agent may read a lead without ever replying to it.
+    status: {
+      type: String,
+      enum: ["new", "seen", "replied"],
+      default: "new",
+    },
   },
   {
     timestamps: true,

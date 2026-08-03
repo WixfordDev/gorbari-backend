@@ -82,6 +82,7 @@ const redactLead = (lead) => {
     id: plain.id || plain._id,
     type: plain.type,
     intent: plain.intent,
+    status: plain.status,
     createdAt: plain.createdAt,
     property: plain.property
       ? {

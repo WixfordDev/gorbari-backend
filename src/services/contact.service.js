@@ -60,7 +60,7 @@ const getAllcontact = async (filter, options, user) => {
   // Enums must match exactly. Regex-matching `type` meant a filter of "general"
   // could not be distinguished from any value containing it, and left the door
   // open to a caller passing a pattern instead of a value.
-  const exactFields = ["type", "intent"];
+  const exactFields = ["type", "intent", "status"];
 
   for (const key in filter) {
     if (!filter[key]) continue;
@@ -106,8 +106,39 @@ const getAllcontact = async (filter, options, user) => {
 };
 
 
+// Update the follow-up status of a single enquiry. Only `status` is touched —
+// the sender details, message and property are immutable from this flow.
+const updateContactStatus = async (contactId, status) => {
+  const contact = await Contact.findByIdAndUpdate(
+    contactId,
+    { $set: { status } },
+    { new: true, runValidators: true }
+  ).populate("propertyWoner");
+  if (!contact) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
+  }
+  return contact;
+};
+
+const getLeadStats = async (user) => {
+  const base = { propertyWoner: user.id, type: "property" };
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [total, newToday, unread] = await Promise.all([
+    Contact.countDocuments(base),
+    Contact.countDocuments({ ...base, createdAt: { $gte: startOfToday } }),
+    Contact.countDocuments({ ...base, status: "new" }),
+  ]);
+
+  return { total, newToday, unread };
+};
+
 module.exports = {
   createContacts,
   getContactById,
   getAllcontact,
+  updateContactStatus,
+  getLeadStats,
 };

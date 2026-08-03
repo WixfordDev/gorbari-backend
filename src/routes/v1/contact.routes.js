@@ -25,4 +25,12 @@ router
   .route("/:contactId")
   .get(auth("adminAndAgent"), contactController.getContact);
 
+router
+  .route("/:contactId/status")
+  .patch(
+    auth("adminAndAgent"),
+    validate(contactValidation.updateContactStatus),
+    contactController.updateContactStatus
+  );
+
 module.exports = router;

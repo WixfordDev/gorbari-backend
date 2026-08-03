@@ -113,6 +113,7 @@ const getSelfContacts = catchAsync(async (req, res) => {
     "address",
     "type",
     "intent",
+    "status",
     "search",
   ]);
 
@@ -150,6 +151,9 @@ const getSelfContacts = catchAsync(async (req, res) => {
       statusCode: httpStatus.OK,
       data: {
         ...payload,
+        // Totals are computed against every lead the agent owns, not just the
+        // paginated page, so the header counts stay correct as they flip pages.
+        stats: await contactService.getLeadStats(user),
         // The client needs to know why detail is missing so it can offer the
         // right remedy: subscribe, renew, or upgrade.
         leadAccess: access,
@@ -160,9 +164,36 @@ const getSelfContacts = catchAsync(async (req, res) => {
   );
 });
 
+const updateContactStatus = catchAsync(async (req, res) => {
+  const existing = await contactService.getContactById(req.params.contactId);
+
+  // Clients may only update the status of a lead belonging to them, and this
+  // must be checked before the update so a non-owner cannot mutate a row by
+  // guessing its id.
+  const isOwner = String(existing.propertyWoner?.id || existing.propertyWoner) === String(req.user.id);
+  if (req.user.role !== "admin" && !isOwner) {
+    throw new ApiError(httpStatus.FORBIDDEN, "This enquiry is not yours");
+  }
+
+  const contact = await contactService.updateContactStatus(
+    req.params.contactId,
+    req.body.status
+  );
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Contact status updated",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: { id: contact.id, status: contact.status },
+    })
+  );
+});
+
 module.exports = {
   createContact,
   getContact,
   getContacts,
   getSelfContacts,
+  updateContactStatus,
 };
