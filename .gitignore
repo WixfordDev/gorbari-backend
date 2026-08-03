@@ -1,6 +1,10 @@
 # Dependencies
 node_modules
 
+# This project uses pnpm; a stray npm lockfile would resolve dependencies
+# differently from pnpm-lock.yaml and quietly diverge the two.
+package-lock.json
+
 # yarn error logs
 yarn-error.log
 
