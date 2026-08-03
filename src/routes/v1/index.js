@@ -10,42 +10,20 @@ const subscriptionRoute = require("./subscription.route");
 const paymentGatewayRoute = require("./paymentGateway.routes");
 const subAdminRoute = require("./subAdmin.routes");
 
+const locationRoute = require("./location.routes");
+
 const router = express.Router();
 
 const defaultRoutes = [
-  {
-    path: "/auth",
-    route: authRoute,
-  },
-  {
-    path: "/users",
-    route: userRoute,
-  },
-  {
-    path: "/property",
-    route: propertyRoute,
-  },
-  {
-    path: "/subscriptions",
-    route: subscriptionRoute,
-  },
-  {
-    path: "/gateways",
-    route: paymentGatewayRoute,
-  },
-
-  {
-    path: "/sub-admins",
-    route: subAdminRoute,
-  },
-  {
-    path: "/contact",
-    route: contactRoute,
-  },
-  {
-    path: "/info",
-    route: infoRoute,
-  },
+  { path: "/auth", route: authRoute },
+  { path: "/users", route: userRoute },
+  { path: "/property", route: propertyRoute },
+  { path: "/subscriptions", route: subscriptionRoute },
+  { path: "/gateways", route: paymentGatewayRoute },
+  { path: "/sub-admins", route: subAdminRoute },
+  { path: "/contact", route: contactRoute },
+  { path: "/info", route: infoRoute },
+  { path: "/locations", route: locationRoute },
 ];
 
 const devRoutes = [
