@@ -4,14 +4,7 @@ const { Contact, Property } = require("../models");
 const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 
-/**
- * Neutralise regex metacharacters in a user-supplied search term.
- *
- * Filter values are interpolated straight into a $regex, so without this a term
- * like "a{99999}" or a long alternation becomes a pathological pattern the
- * database has to evaluate against every document.
- */
-const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = require("../utils/escapeRegex");
 
 // Create a new contact
 const createContacts = async (data) => {
