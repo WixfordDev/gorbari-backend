@@ -10,6 +10,11 @@ const uploadGateway = userFileUploadMiddleware();
 
 const router = express.Router();
 
+// Declared before "/:id" so the literal path is not captured as an id.
+router
+  .route("/transactions/me")
+  .get(auth("common"), transactionController.myTransactionList);
+
 router
   .route("/transactions")
   .get(auth("common"), checkAccess("transactionManagement"), transactionController.transactionList);

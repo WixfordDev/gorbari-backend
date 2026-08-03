@@ -79,10 +79,43 @@ const transactionList = catchAsync(async (req, res) => {
   );
 });
 
+/**
+ * A buyer's own purchase history.
+ *
+ * Separate from transactionList because that endpoint is an admin tool: it
+ * accepts a `user` filter and returns every account's payments. Here the owner
+ * is taken from the verified token and passed as a scope the query cannot
+ * widen, so no permission check is needed — the caller is by construction only
+ * ever reading their own records.
+ */
+const myTransactionList = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ["type", "status", "transactionId"]);
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+
+  // Newest first: a history page is read to check the most recent purchase.
+  if (!options.sortBy) options.sortBy = "createdAt:desc";
+
+  const result = await transactionService.queryTransactions(
+    filter,
+    options,
+    req.user.id
+  );
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Transactions Retrieved",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: result,
+    })
+  );
+});
+
 module.exports = {
   transactionCreate,
   transactionGetById,
   transactionUpdateById,
   transactionDeleteById,
   transactionList,
+  myTransactionList,
 };
