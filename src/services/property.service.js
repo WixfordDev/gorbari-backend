@@ -77,8 +77,41 @@ const SLUG_RETRY_LIMIT = 3;
 
 const slugExists = async (slug) => Boolean(await Property.exists({ slug }));
 
+/**
+ * Fields an agent may legitimately leave blank.
+ *
+ * A property with no stated price or room count is a real listing — land has no
+ * bedrooms, and a price is often "on request" — so these are stored as null
+ * rather than 0. Zero is kept meaningful: a studio genuinely has 0 bedrooms,
+ * and the listing pages show a stated 0 while hiding an unstated one.
+ */
+const OPTIONAL_NUMERIC_FIELDS = ["price", "areaSqFt", "lotSize", "bedrooms", "bathrooms"];
+
+/**
+ * Turn a cleared form field back into null.
+ *
+ * Requests arrive as multipart/form-data, which has no concept of a type: every
+ * value is a string, and a field the user emptied comes through as "". Passing
+ * that to a Number path throws a CastError, so the whole update would fail
+ * because someone deleted a price.
+ */
+const normalizeOptionalNumbers = (body) => {
+  OPTIONAL_NUMERIC_FIELDS.forEach((field) => {
+    if (!(field in body)) return;
+    const value = body[field];
+    if (value === "" || value === null || value === undefined) {
+      body[field] = null;
+      return;
+    }
+    if (typeof value === "string" && value.trim() === "") {
+      body[field] = null;
+    }
+  });
+};
+
 const createProperty = async (propertyBody) => {
   normalizeAdministrativeArea(propertyBody);
+  normalizeOptionalNumbers(propertyBody);
 
   // Calculate 10% commission from price
   if (propertyBody.price) {
@@ -456,6 +489,7 @@ const updatePropertyById = async (propertyId, updateBody) => {
   }
 
   normalizeAdministrativeArea(updateBody);
+  normalizeOptionalNumbers(updateBody);
 
   // The slug is the property's public URL and is frozen after creation, so it is
   // dropped here even when the title changes. Changing it would break every

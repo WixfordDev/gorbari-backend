@@ -108,13 +108,15 @@ const propertySchema = mongoose.Schema(
     },
     price: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
+      default: null,
     },
     areaSqFt: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
+      default: null,
     },
     lotSize: {
       type: Number,
