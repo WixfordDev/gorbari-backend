@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { Property } = require("../../models");
 const { upsertByUnique } = require("./helpers");
+const { buildUniqueSlug } = require("../slug");
 const { IDS } = require("./users");
 
 // Absolute image URLs so both frontends render them via resolveImage()
@@ -231,7 +232,23 @@ const propertiesData = [
 ];
 
 const seedProperties = async () => {
-  const result = await upsertByUnique(Property, "title", propertiesData);
+  // A property without a slug is unreachable by URL. The service derives one
+  // from the title at creation; the seed must do the same so every seeded
+  // listing has a canonical link. It also avoids the slug: null conflict: the
+  // sparse unique index would reject a second document whose slug field holds
+  // an explicit null.
+  const claimed = new Set();
+  const slugExists = async (slug) =>
+    claimed.has(slug) || Boolean(await Property.exists({ slug }));
+
+  const withSlugs = [];
+  for (const doc of propertiesData) {
+    const slug = await buildUniqueSlug(doc.title, slugExists);
+    claimed.add(slug);
+    withSlugs.push({ ...doc, slug });
+  }
+
+  const result = await upsertByUnique(Property, "title", withSlugs);
   console.log(`Properties seeded (${result.created} created, ${result.updated} updated)`);
 };
 
