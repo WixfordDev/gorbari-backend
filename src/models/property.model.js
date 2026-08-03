@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { toJSON, paginate } = require("./plugins");
+const { DIVISION_NAMES } = require("../config/bangladeshGeo");
 
 const propertySchema = mongoose.Schema(
   {
@@ -47,6 +48,28 @@ const propertySchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    // Bangladesh's administrative geography, replacing the free-text city/state
+    // pair for local listings. Constrained to the known divisions so a filter
+    // by division cannot be defeated by a typo or an alternate spelling.
+    //
+    // Not required: properties predating this field have neither value, and
+    // making them required would fail every update to an older listing.
+    division: {
+      type: String,
+      trim: true,
+      enum: [...DIVISION_NAMES, null],
+      default: null,
+      index: true,
+    },
+    district: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    // Kept alongside division/district rather than dropped: existing documents
+    // hold values here, the public listing pages still read them, and a
+    // non-Bangladeshi address has nowhere else to go.
     city: {
       type: String,
       trim: true,

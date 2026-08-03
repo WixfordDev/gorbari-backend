@@ -3,6 +3,71 @@ const { Property } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 const { buildUniqueSlug } = require("../utils/slug");
+const {
+  findDivisionByDistrict,
+  isValidDistrictForDivision,
+  DIVISION_NAMES,
+} = require("../config/bangladeshGeo");
+
+/**
+ * Reconcile the division/district pair before it reaches the database.
+ *
+ * A district belongs to exactly one division, so the district is treated as
+ * authoritative and the division is derived from it. That lets a client send
+ * only a district — which is what happens when the user picks the district
+ * first, or when Google Places returns one — and still store a consistent pair.
+ *
+ * A mismatched pair is a contradiction rather than a preference, so it is
+ * rejected instead of silently corrected: quietly rewriting the division would
+ * publish the property somewhere the agent did not choose.
+ */
+const normalizeAdministrativeArea = (body) => {
+  const district = body.district ? String(body.district).trim() : null;
+  const division = body.division ? String(body.division).trim() : null;
+
+  if (!district && !division) return;
+
+  if (district) {
+    const owningDivision = findDivisionByDistrict(district);
+    if (!owningDivision) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Unknown district "${district}"`
+      );
+    }
+
+    if (division && !isValidDistrictForDivision(district, division)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `District "${district}" belongs to ${owningDivision} division, not ${division}`
+      );
+    }
+
+    // Canonical casing, so a value typed as "dhaka" is stored as "Dhaka" and
+    // an exact-match filter on division keeps working.
+    body.district = findCanonicalDistrict(district);
+    body.division = owningDivision;
+    return;
+  }
+
+  if (!DIVISION_NAMES.some((name) => name.toLowerCase() === division.toLowerCase())) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Unknown division "${division}"`);
+  }
+  body.division = DIVISION_NAMES.find(
+    (name) => name.toLowerCase() === division.toLowerCase()
+  );
+};
+
+const findCanonicalDistrict = (district) => {
+  const owningDivision = findDivisionByDistrict(district);
+  if (!owningDivision) return district;
+  const { getDistrictsByDivision } = require("../config/bangladeshGeo");
+  return (
+    getDistrictsByDivision(owningDivision).find(
+      (name) => name.toLowerCase() === district.trim().toLowerCase()
+    ) || district
+  );
+};
 
 // Number of times a create is retried when the unique slug index rejects the
 // insert. A retry only happens when a concurrent request claimed the same slug
@@ -13,6 +78,8 @@ const SLUG_RETRY_LIMIT = 3;
 const slugExists = async (slug) => Boolean(await Property.exists({ slug }));
 
 const createProperty = async (propertyBody) => {
+  normalizeAdministrativeArea(propertyBody);
+
   // Calculate 10% commission from price
   if (propertyBody.price) {
     const commissionPercentage = 10;
@@ -387,6 +454,8 @@ const updatePropertyById = async (propertyId, updateBody) => {
   if (!property) {
     throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
   }
+
+  normalizeAdministrativeArea(updateBody);
 
   // The slug is the property's public URL and is frozen after creation, so it is
   // dropped here even when the title changes. Changing it would break every
