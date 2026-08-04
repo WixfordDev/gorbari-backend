@@ -18,6 +18,12 @@ const homepageSettingsSchema = new mongoose.Schema(
         ref: "Property",
       },
     ],
+    featuredProperties: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Property",
+      },
+    ],
     // Plain-text heading/subheading for the "Explore & Find Your Dream Home"
     // section, editable separately from the rich-text body below them so the
     // admin can't accidentally break their styling/size.
