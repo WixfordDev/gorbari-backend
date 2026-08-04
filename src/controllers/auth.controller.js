@@ -17,7 +17,7 @@ const register = catchAsync(async (req, res) => {
   if (isUser) {
     if (isUser.isDeleted) {
       await userService.isUpdateUser(isUser.id, {
-        fullName: fullName || `${firstName} ${lastName}`,
+        fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
         firstName,
         lastName,
         email,
@@ -25,7 +25,7 @@ const register = catchAsync(async (req, res) => {
       });
     } else if (!isUser.isEmailVerified) {
       await userService.isUpdateUser(isUser.id, {
-        fullName: fullName || `${firstName} ${lastName}`,
+        fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
         firstName,
         lastName,
         email,
@@ -36,7 +36,7 @@ const register = catchAsync(async (req, res) => {
     }
   } else {
     await userService.createUser({
-      fullName: fullName || `${firstName} ${lastName}`,
+      fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
       firstName,
       lastName,
       email,
