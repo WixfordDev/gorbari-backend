@@ -4,6 +4,7 @@ const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
 const { userService } = require("../services");
+const { Property } = require("../models");
 
 const createUser = catchAsync(async (req, res) => {
   const user = await userService.createUser(req.body);
@@ -39,10 +40,22 @@ const getPublicAgent = catchAsync(async (req, res) => {
 
   const result = await userService.queryUsers(filter, options);
 
+  // Real count of each agent's own (non-deleted) listings, not a placeholder -
+  // grouped in one aggregation rather than a countDocuments() per agent.
+  const agentIds = result.results.map((agent) => agent._id);
+  const listingCounts = await Property.aggregate([
+    { $match: { createdBy: { $in: agentIds }, isDeleted: false } },
+    { $group: { _id: "$createdBy", count: { $sum: 1 } } },
+  ]);
+  const listingCountByAgent = Object.fromEntries(
+    listingCounts.map(({ _id, count }) => [_id.toString(), count])
+  );
+
   const agents = result.results.map((agent) => ({
     id: agent._id,
     fullName: agent.fullName,
-    image: agent.profileImage || null,
+    profileImage: agent.profileImage || null,
+    listings: listingCountByAgent[agent._id.toString()] || 0,
   }));
 
   res.status(httpStatus.OK).json(
