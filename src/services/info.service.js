@@ -280,7 +280,22 @@ const getHomepageSettings = async () => {
   const settings = await HomepageSettings.findOne()
     .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
     .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS);
-  return settings;
+
+  if (settings) return settings;
+
+  // Never configured yet - default to the newest listings rather than an
+  // empty homepage, until the admin picks their own. Property.find() simply
+  // returns [] with no properties yet, so this never errors on an empty site.
+  const [heroDefaults, dreamHomeDefaults] = await Promise.all([
+    Property.find({ isDeleted: false }).sort({ createdAt: -1 }).limit(3).select(PROPERTY_SHOWCASE_FIELDS),
+    Property.find({ isDeleted: false }).sort({ createdAt: -1 }).limit(2).select(PROPERTY_SHOWCASE_FIELDS),
+  ]);
+
+  return {
+    heroProperties: heroDefaults,
+    dreamHomeProperties: dreamHomeDefaults,
+    dreamHomeContent: "",
+  };
 };
 
 const updateHomepageSettings = async (body) => {
