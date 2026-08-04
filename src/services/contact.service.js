@@ -1,12 +1,52 @@
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
-const { Contact, Property } = require("../models");
+const { Contact, Property, User } = require("../models");
 const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 const notificationService = require("./notification.service");
 const logger = require("../config/logger");
 
 const escapeRegex = require("../utils/escapeRegex");
+
+/**
+ * Attaches sender info onto each contact's `replies`, given plain contact
+ * document(s) with `replies.sender` left as raw ids.
+ *
+ * `.populate("replies.sender", ...)` looks like the obvious way to do this,
+ * but a ref populated inside an array of subdocuments crashes this schema's
+ * `toJSON()` deep inside Mongoose's own clone logic ("Cannot read properties
+ * of undefined (reading 'toString')") - reproduced directly against a real
+ * document, unrelated to any data problem. Fetching replies unpopulated and
+ * attaching sender info afterward, by hand, on the plain object sidesteps it.
+ */
+const attachReplySenders = async (contactDocOrArray) => {
+  const list = Array.isArray(contactDocOrArray) ? contactDocOrArray : [contactDocOrArray];
+
+  const senderIds = [
+    ...new Set(list.flatMap((c) => (c.replies || []).map((r) => String(r.sender)))),
+  ];
+
+  const senders = senderIds.length
+    ? await User.find({ _id: { $in: senderIds } }).select("fullName profileImage role")
+    : [];
+  const senderMap = new Map(
+    senders.map((u) => [
+      String(u._id),
+      { id: u.id, fullName: u.fullName, profileImage: u.profileImage, role: u.role },
+    ])
+  );
+
+  const results = list.map((c) => {
+    const json = typeof c.toJSON === "function" ? c.toJSON() : c;
+    json.replies = (json.replies || []).map((r) => ({
+      ...r,
+      sender: senderMap.get(String(r.sender)) || null,
+    }));
+    return json;
+  });
+
+  return Array.isArray(contactDocOrArray) ? results : results[0];
+};
 
 // Create a new contact
 const createContacts = async (data) => {
@@ -57,13 +97,11 @@ const createContacts = async (data) => {
 
 // Get a contact by ID
 const getContactById = async (contactId) => {
-  const contact = await Contact.findById(contactId)
-    .populate("user property propertyWoner")
-    .populate("replies.sender", "fullName profileImage role");
+  const contact = await Contact.findById(contactId).populate("user property propertyWoner");
   if (!contact) {
     throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
   }
-  return contact;
+  return attachReplySenders(contact);
 };
 
 // Shared by getAllcontact and getSentContacts: applies the same free-text and
@@ -127,13 +165,10 @@ const getAllcontact = async (filter, options, user) => {
       path: "property",
       select: "title slug catagory type images",
     },
-    {
-      path: "replies.sender",
-      select: "fullName profileImage role",
-    },
   ];
 
   const contacts = await Contact.paginate(query, options);
+  contacts.results = await attachReplySenders(contacts.results);
   return contacts;
 };
 
@@ -155,13 +190,10 @@ const getSentContacts = async (filter, options, userId) => {
       path: "property",
       select: "title slug catagory type images price",
     },
-    {
-      path: "replies.sender",
-      select: "fullName profileImage role",
-    },
   ];
 
   const contacts = await Contact.paginate(query, options);
+  contacts.results = await attachReplySenders(contacts.results);
   return contacts;
 };
 
@@ -248,8 +280,7 @@ const addReply = async (contactId, senderId, message) => {
     }
   }
 
-  await contact.populate("replies.sender", "fullName profileImage role");
-  return contact;
+  return attachReplySenders(contact);
 };
 
 const getLeadStats = async (user) => {
