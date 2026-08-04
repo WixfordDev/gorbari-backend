@@ -207,6 +207,22 @@ const updateContactStatus = catchAsync(async (req, res) => {
   );
 });
 
+const replyToContact = catchAsync(async (req, res) => {
+  // Ownership (is this the owner replying, or the original sender following
+  // up?) is resolved inside the service, since it decides which of the two
+  // this request is, not just whether it's allowed.
+  const contact = await contactService.addReply(req.params.contactId, req.user.id, req.body.message);
+
+  res.status(httpStatus.CREATED).json(
+    response({
+      message: "Reply sent",
+      status: "OK",
+      statusCode: httpStatus.CREATED,
+      data: contact,
+    })
+  );
+});
+
 module.exports = {
   createContact,
   getContact,
@@ -214,4 +230,5 @@ module.exports = {
   getSelfContacts,
   getMyContacts,
   updateContactStatus,
+  replyToContact,
 };

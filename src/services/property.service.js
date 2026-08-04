@@ -1,5 +1,5 @@
 const httpStatus = require("http-status");
-const { Property } = require("../models");
+const { Property, Favorite } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 const { buildUniqueSlug } = require("../utils/slug");
@@ -8,6 +8,8 @@ const {
   isValidDistrictForDivision,
   DIVISION_NAMES,
 } = require("../config/bangladeshGeo");
+const notificationService = require("./notification.service");
+const logger = require("../config/logger");
 
 /**
  * Reconcile the division/district pair before it reaches the database.
@@ -109,6 +111,58 @@ const normalizeOptionalNumbers = (body) => {
   });
 };
 
+/**
+ * There is no "favourite location" concept of its own - users only favourite
+ * individual properties. This derives interest in an area from that: anyone
+ * who has favourited a property in the same district as this new one is
+ * assumed to care about that district, and gets notified.
+ */
+const notifyFavouriteAreaUsers = async (property) => {
+  if (!property.district) return;
+
+  const propertiesInDistrict = await Property.find({
+    district: property.district,
+    isDeleted: false,
+    _id: { $ne: property._id },
+  }).select("_id");
+
+  if (propertiesInDistrict.length === 0) return;
+
+  const favourites = await Favorite.find({
+    property: { $in: propertiesInDistrict.map((p) => p._id) },
+    isDeleted: false,
+  }).select("user");
+
+  const interestedUserIds = new Set(
+    favourites
+      .map((f) => String(f.user))
+      // Don't notify the lister about their own new listing.
+      .filter((id) => id !== String(property.createdBy))
+  );
+
+  await Promise.all(
+    [...interestedUserIds].map((userId) =>
+      notificationService
+        .createNotification({
+          userId,
+          sendBy: property.createdBy,
+          title: "New property in your favourite area",
+          content: `A new listing "${property.title}" was just added in ${property.district}.`,
+          type: "new-property",
+          priority: "low",
+        })
+        .catch((err) =>
+          logger.error(
+            "Failed to notify favourite-area user %s for property %s: %s",
+            userId,
+            property._id,
+            err.message || err
+          )
+        )
+    )
+  );
+};
+
 const createProperty = async (propertyBody) => {
   normalizeAdministrativeArea(propertyBody);
   normalizeOptionalNumbers(propertyBody);
@@ -133,10 +187,12 @@ const createProperty = async (propertyBody) => {
   // simultaneous creates with the same title can therefore both settle on the
   // same candidate, and the unique index rejects the loser — retry with a fresh
   // suffix instead of surfacing a duplicate-key error.
+  let property;
   for (let attempt = 1; ; attempt += 1) {
     try {
       const slug = await buildUniqueSlug(body.title, slugExists);
-      return await Property.create({ ...body, slug });
+      property = await Property.create({ ...body, slug });
+      break;
     } catch (err) {
       const isDuplicateSlug = err.code === 11000 && err.keyPattern && err.keyPattern.slug;
       if (!isDuplicateSlug || attempt >= SLUG_RETRY_LIMIT) {
@@ -144,6 +200,14 @@ const createProperty = async (propertyBody) => {
       }
     }
   }
+
+  // The listing is already saved, so this must not slow down or fail the
+  // create response - it can involve notifying an arbitrary number of users.
+  notifyFavouriteAreaUsers(property).catch((err) =>
+    logger.error("Favourite-area notification pass failed for property %s: %s", property._id, err.message || err)
+  );
+
+  return property;
 };
 
 const queryProperties = async (filter, options) => {

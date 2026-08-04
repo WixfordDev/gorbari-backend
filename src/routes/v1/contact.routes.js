@@ -35,4 +35,15 @@ router
     contactController.updateContactStatus
   );
 
+// Either side of the conversation can reply - the property owner or the
+// original sender - so this only requires being signed in; addReply() itself
+// decides which of the two the caller is, and rejects anyone who is neither.
+router
+  .route("/:contactId/reply")
+  .post(
+    auth("common"),
+    validate(contactValidation.replyToContact),
+    contactController.replyToContact
+  );
+
 module.exports = router;

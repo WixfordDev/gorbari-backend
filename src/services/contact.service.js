@@ -57,7 +57,9 @@ const createContacts = async (data) => {
 
 // Get a contact by ID
 const getContactById = async (contactId) => {
-  const contact = await Contact.findById(contactId).populate("user property propertyWoner");
+  const contact = await Contact.findById(contactId)
+    .populate("user property propertyWoner")
+    .populate("replies.sender", "fullName profileImage role");
   if (!contact) {
     throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
   }
@@ -125,6 +127,10 @@ const getAllcontact = async (filter, options, user) => {
       path: "property",
       select: "title slug catagory type images",
     },
+    {
+      path: "replies.sender",
+      select: "fullName profileImage role",
+    },
   ];
 
   const contacts = await Contact.paginate(query, options);
@@ -148,6 +154,10 @@ const getSentContacts = async (filter, options, userId) => {
     {
       path: "property",
       select: "title slug catagory type images price",
+    },
+    {
+      path: "replies.sender",
+      select: "fullName profileImage role",
     },
   ];
 
@@ -188,6 +198,60 @@ const updateContactStatus = async (contactId, status) => {
   return contact;
 };
 
+// Appends a message to the thread, from either side of the conversation:
+// the property owner replying, or the original sender following up. Which
+// one it is is inferred from who's calling, not passed in, so a caller can
+// never claim to be the other party.
+const addReply = async (contactId, senderId, message) => {
+  const contact = await Contact.findById(contactId)
+    .populate("user", "fullName")
+    .populate("propertyWoner", "fullName")
+    .populate("property", "title");
+
+  if (!contact) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
+  }
+
+  const ownerId = String(contact.propertyWoner?._id || contact.propertyWoner?.id || "");
+  const enquirerId = String(contact.user?._id || contact.user?.id || "");
+  const isOwnerReplying = ownerId === String(senderId);
+  const isSenderFollowingUp = enquirerId === String(senderId);
+
+  if (!isOwnerReplying && !isSenderFollowingUp) {
+    throw new ApiError(httpStatus.FORBIDDEN, "You are not part of this conversation");
+  }
+
+  contact.replies.push({ sender: senderId, message });
+  // Doubles as "whose turn it is": the owner replying resolves it for the
+  // sender, the sender following up puts it back on the owner's plate.
+  contact.status = isOwnerReplying ? "replied" : "new";
+  await contact.save();
+
+  // The enquiry is already updated, so a notification failure must not fail
+  // the request - it would only mean the bell icon misses this one entry.
+  const recipientId = isOwnerReplying ? contact.user?._id : contact.propertyWoner?._id;
+  if (recipientId) {
+    const propertyTitle = contact.property?.title || "a property";
+    const senderName = isOwnerReplying ? contact.propertyWoner?.fullName : contact.user?.fullName;
+
+    try {
+      await notificationService.createNotification({
+        userId: recipientId,
+        sendBy: senderId,
+        title: isOwnerReplying ? "You have a new reply" : "New follow-up message",
+        content: `${senderName || "Someone"} replied about "${propertyTitle}": ${message}`,
+        type: "lead-reply",
+        priority: "medium",
+      });
+    } catch (err) {
+      logger.error("Failed to create reply notification: %s", err.message || err);
+    }
+  }
+
+  await contact.populate("replies.sender", "fullName profileImage role");
+  return contact;
+};
+
 const getLeadStats = async (user) => {
   const base = { propertyWoner: user.id, type: "property" };
 
@@ -209,5 +273,6 @@ module.exports = {
   getAllcontact,
   getSentContacts,
   updateContactStatus,
+  addReply,
   getLeadStats,
 };

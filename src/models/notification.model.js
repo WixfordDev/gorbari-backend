@@ -19,11 +19,15 @@ const notificationSchema = new Schema({
         required: false,
         default: null
     },
+    // No default: `default: null` combined with `enum` set every notification's
+    // role to the literal value null and then validated it against the enum,
+    // which never includes null - so every single Notification.create() call
+    // failed validation. Leaving it unset when not provided skips validation
+    // for that path entirely, the same trap documented for Property.slug.
     role: {
         type: String,
         required: false,
         enum: roles,
-        default: null,
     },
     title: {
         type: String,

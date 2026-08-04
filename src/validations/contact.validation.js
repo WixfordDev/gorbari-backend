@@ -44,8 +44,18 @@ const updateContactStatus = {
   }),
 };
 
+const replyToContact = {
+  params: Joi.object().keys({
+    contactId: Joi.string().custom(objectId).required(),
+  }),
+  body: Joi.object().keys({
+    message: Joi.string().trim().min(1).max(2000).required(),
+  }),
+};
+
 module.exports = {
   createContact,
   createPropertyContact,
   updateContactStatus,
+  replyToContact,
 };

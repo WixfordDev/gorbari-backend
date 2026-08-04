@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const app = require("./app");
 const config = require("./config/config");
 const logger = require("./config/logger");
+const { scheduleSubscriptionExpiryWarnings } = require("./services/subscription.service");
 
 // My Local IP Address
 const myIp = process.env.BACKEND_IP || "0.0.0.0";
@@ -25,6 +26,8 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   socketIO(io);
 
   global.io = io;
+
+  scheduleSubscriptionExpiryWarnings();
 });
 
 const exitHandler = () => {
