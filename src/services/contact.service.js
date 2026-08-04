@@ -152,7 +152,7 @@ const getAllcontact = async (filter, options, user) => {
   options.populate = [
     {
       path: "propertyWoner",
-      select: "fullName profileImage email",
+      select: "fullName profileImage email phoneNumber",
     },
     {
       path: "user",
