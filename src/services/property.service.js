@@ -335,6 +335,9 @@ const queryProperties = async (filter, options) => {
       videos: 1,
       features: 1,
       favorites: 1,
+      // Was missing here, so every card fell back to its `|| 0` default no
+      // matter how many times the detail page had actually incremented it.
+      views: 1,
       inquiries: 1,
       isFeatures: 1,
       isBosted: 1,
