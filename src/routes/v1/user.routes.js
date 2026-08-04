@@ -23,6 +23,10 @@ router
     userController.updateProfile
   );
 
+router
+  .route("/fcm-token")
+  .patch(auth("common"), validate(userValidation.updateFcmToken), userController.updateFcmToken);
+
 router.route("/lists").get(auth("common"), checkAccess("userManagement"), userController.getUsers);
 
 router.route("/public-agent").get(userController.getPublicAgent);

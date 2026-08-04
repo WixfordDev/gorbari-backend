@@ -69,6 +69,14 @@ const login = catchAsync(async (req, res) => {
   }
   const user = await authService.loginUserWithEmailAndPassword(email, password);
 
+  // The browser may already hold a push token from a previous session (the
+  // permission prompt, not login, is what asks for one) - save it here so a
+  // returning user doesn't need a separate round trip just to re-register it.
+  if (req.body.fcmToken && req.body.fcmToken !== user.fcmToken) {
+    user.fcmToken = req.body.fcmToken;
+    await user.save();
+  }
+
   const tokens = await tokenService.generateAuthTokens(user);
   res.status(httpStatus.OK).json(
     response({

@@ -122,6 +122,7 @@ const takeSubscription = catchAsync(async (req, res) => {
 const approvedSubscriptions = catchAsync(async (req, res) => {
   const result = await subscriptionService.approvedSubscriptions(
     req.body.transactionId,
+    req.user.id,
   );
   
   res.status(httpStatus.CREATED).json(
@@ -138,6 +139,7 @@ const approvedSubscriptions = catchAsync(async (req, res) => {
 const rejectSubscriptions = catchAsync(async (req, res) => {
   const result = await subscriptionService.rejectSubscriptions(
     req.body.transactionId,
+    req.user.id,
   );
   
   res.status(httpStatus.CREATED).json(

@@ -3,6 +3,8 @@ const ApiError = require("../utils/ApiError");
 const { Contact, Property } = require("../models");
 const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
+const notificationService = require("./notification.service");
+const logger = require("../config/logger");
 
 const escapeRegex = require("../utils/escapeRegex");
 
@@ -31,6 +33,21 @@ const createContacts = async (data) => {
         propertySlug: property?.slug,
       })
     );
+
+    // The enquiry is already saved, so a notification failure must not fail
+    // the request - it would only mean the bell icon misses this one entry.
+    try {
+      await notificationService.createNotification({
+        userId: data.propertyWoner,
+        sendBy: data.user,
+        title: "New enquiry received",
+        content: `Someone enquired about "${property?.title || "your property"}"`,
+        type: "lead",
+        priority: "medium",
+      });
+    } catch (err) {
+      logger.error("Failed to create lead notification: %s", err.message || err);
+    }
   } else {
     sendEmailInBackground(() => sendContactsUsEmail(data));
   }
@@ -146,10 +163,28 @@ const updateContactStatus = async (contactId, status) => {
     contactId,
     { $set: { status } },
     { new: true, runValidators: true }
-  ).populate("propertyWoner");
+  ).populate("propertyWoner").populate("property", "title slug");
   if (!contact) {
     throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
   }
+
+  // "seen" carries no useful information for the sender - it's still not
+  // actionable to them - so only a reply is worth surfacing as a notification.
+  if (status === "replied" && contact.type === "property" && contact.user) {
+    try {
+      await notificationService.createNotification({
+        userId: contact.user,
+        sendBy: contact.propertyWoner?._id || contact.propertyWoner?.id,
+        title: "Your enquiry was replied to",
+        content: `The lister replied to your enquiry about "${contact.property?.title || "a property"}"`,
+        type: "lead-reply",
+        priority: "medium",
+      });
+    } catch (err) {
+      logger.error("Failed to create reply notification: %s", err.message || err);
+    }
+  }
+
   return contact;
 };
 

@@ -83,6 +83,14 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null
     },
+    // Firebase Cloud Messaging registration token for this device. Overwritten
+    // on every login/refresh rather than keyed per-device, so a user signed in
+    // on a second browser simply stops receiving push on the first - accepted
+    // for now since there is no multi-device token list yet.
+    fcmToken: {
+      type: String,
+      default: null,
+    },
     oneTimeCode: {
       type: String,
       required: false,

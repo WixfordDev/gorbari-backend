@@ -9,6 +9,7 @@ const contactRoute = require("./contact.routes");
 const subscriptionRoute = require("./subscription.route");
 const paymentGatewayRoute = require("./paymentGateway.routes");
 const subAdminRoute = require("./subAdmin.routes");
+const notificationRoute = require("./notification.routes");
 
 const locationRoute = require("./location.routes");
 
@@ -22,6 +23,7 @@ const defaultRoutes = [
   { path: "/gateways", route: paymentGatewayRoute },
   { path: "/sub-admins", route: subAdminRoute },
   { path: "/contact", route: contactRoute },
+  { path: "/notification", route: notificationRoute },
   { path: "/info", route: infoRoute },
   { path: "/locations", route: locationRoute },
 ];

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 const { roles } = require("../config/roles");
+const { toJSON, paginate } = require("./plugins");
 
 const notificationSchema = new Schema({
     userId: {
@@ -60,5 +61,8 @@ const notificationSchema = new Schema({
     {
         timestamps: true
     });
+
+notificationSchema.plugin(toJSON);
+notificationSchema.plugin(paginate);
 
 module.exports = mongoose.model("Notification", notificationSchema);

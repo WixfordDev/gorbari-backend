@@ -155,6 +155,19 @@ const updateProfile = catchAsync(async (req, res) => {
   );
 });
 
+const updateFcmToken = catchAsync(async (req, res) => {
+  await userService.updateUserById(req.user.id, { fcmToken: req.body.fcmToken });
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Device registered for notifications",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: {},
+    })
+  );
+});
+
 const deleteUser = catchAsync(async (req, res) => {
   await userService.deleteUserById(req.params.userId);
   res.status(httpStatus.OK).json(
@@ -174,6 +187,7 @@ module.exports = {
   getProfile,
   updateUser,
   updateProfile,
+  updateFcmToken,
   deleteUser,
   getPublicAgent
 };

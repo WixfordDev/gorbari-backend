@@ -4,6 +4,8 @@ const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
 const { getUserById } = require("./user.service");
 const transactionService = require("./transaction.service");
+const notificationService = require("./notification.service");
+const logger = require("../config/logger");
 
 const createSubscription = async (subscriptionBody) => {
   const subscription = await Subscription.create(subscriptionBody);
@@ -117,7 +119,7 @@ const takeSubscriptions = async (userId, subData) => {
   return transaction;
 };
 
-const approvedSubscriptions = async (transactionId) => {
+const approvedSubscriptions = async (transactionId, approvedBy) => {
   const transaction = await transactionService.getTransactionById(
     transactionId
   );
@@ -141,10 +143,25 @@ const approvedSubscriptions = async (transactionId) => {
   };
   await user.save();
 
+  // The transaction is already approved, so a notification failure must not
+  // undo that - it would only mean the bell icon misses this one entry.
+  try {
+    await notificationService.createNotification({
+      userId: user._id,
+      sendBy: approvedBy,
+      title: "Subscription approved",
+      content: "Your subscription payment has been approved and is now active.",
+      type: "subscription",
+      priority: "high",
+    });
+  } catch (err) {
+    logger.error("Failed to create subscription-approved notification: %s", err.message || err);
+  }
+
   return transaction;
 };
 
-const rejectSubscriptions = async (transactionId) => {
+const rejectSubscriptions = async (transactionId, rejectedBy) => {
   const transaction = await transactionService.getTransactionById(
     transactionId
   );
@@ -168,6 +185,19 @@ const rejectSubscriptions = async (transactionId) => {
   };
 
   await user.save();
+
+  try {
+    await notificationService.createNotification({
+      userId: user._id,
+      sendBy: rejectedBy,
+      title: "Subscription rejected",
+      content: "Your subscription payment was rejected. Please contact support or try again.",
+      type: "subscription",
+      priority: "high",
+    });
+  } catch (err) {
+    logger.error("Failed to create subscription-rejected notification: %s", err.message || err);
+  }
 
   return transaction;
 };
