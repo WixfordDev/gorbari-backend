@@ -164,6 +164,23 @@ const getSelfContacts = catchAsync(async (req, res) => {
   );
 });
 
+const getMyContacts = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ["status", "intent", "search"]);
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+  options.sortBy = options.sortBy || "createdAt:desc";
+
+  const contacts = await contactService.getSentContacts(filter, options, req.user.id);
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Contacts retrieved successfully",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: contacts,
+    })
+  );
+});
+
 const updateContactStatus = catchAsync(async (req, res) => {
   const existing = await contactService.getContactById(req.params.contactId);
 
@@ -195,5 +212,6 @@ module.exports = {
   getContact,
   getContacts,
   getSelfContacts,
+  getMyContacts,
   updateContactStatus,
 };

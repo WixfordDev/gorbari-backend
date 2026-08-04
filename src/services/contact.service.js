@@ -47,14 +47,10 @@ const getContactById = async (contactId) => {
   return contact;
 };
 
-const getAllcontact = async (filter, options, user) => {
-  const query = {};
-
-  // User-level restriction
-  if (user?.id) {
-    query.propertyWoner = user.id;
-  }
-
+// Shared by getAllcontact and getSentContacts: applies the same free-text and
+// exact-match filters on top of whatever base scope (owner or sender) the
+// caller already put in `query`.
+const applyContactFilters = (query, filter) => {
   // Partial, case-insensitive matching for free-text fields.
   const searchableFields = ["fullName", "email", "phoneNumber", "address"];
   // Enums must match exactly. Regex-matching `type` meant a filter of "general"
@@ -83,6 +79,19 @@ const getAllcontact = async (filter, options, user) => {
     query.$or = [{ fullName: pattern }, { email: pattern }];
   }
 
+  return query;
+};
+
+const getAllcontact = async (filter, options, user) => {
+  const query = {};
+
+  // User-level restriction
+  if (user?.id) {
+    query.propertyWoner = user.id;
+  }
+
+  applyContactFilters(query, filter);
+
   options.populate = [
     {
       path: "propertyWoner",
@@ -98,6 +107,30 @@ const getAllcontact = async (filter, options, user) => {
       // straight to the property.
       path: "property",
       select: "title slug catagory type images",
+    },
+  ];
+
+  const contacts = await Contact.paginate(query, options);
+  return contacts;
+};
+
+// A plain user's own sent property enquiries — the inverse of getAllcontact,
+// which scopes to the property owner. Not paywalled: the lead-access paywall
+// only withholds a sender's details from the property owner, and here the
+// user is reading their own message.
+const getSentContacts = async (filter, options, userId) => {
+  const query = { user: userId, type: "property" };
+
+  applyContactFilters(query, filter);
+
+  options.populate = [
+    {
+      path: "propertyWoner",
+      select: "fullName profileImage email phoneNumber",
+    },
+    {
+      path: "property",
+      select: "title slug catagory type images price",
     },
   ];
 
@@ -139,6 +172,7 @@ module.exports = {
   createContacts,
   getContactById,
   getAllcontact,
+  getSentContacts,
   updateContactStatus,
   getLeadStats,
 };

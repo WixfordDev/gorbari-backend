@@ -21,6 +21,8 @@ router.route("/").get(auth("admin"), contactController.getContacts);
 
 router.route("/list").get(auth("adminAndAgent"), contactController.getSelfContacts);
 
+router.route("/mine").get(auth("common"), contactController.getMyContacts);
+
 router
   .route("/:contactId")
   .get(auth("adminAndAgent"), contactController.getContact);
