@@ -8,12 +8,15 @@ const { objectId } = require("./custom.validation");
 const createContact = {
   body: Joi.object().keys({
     type: Joi.string().valid("general").default("general"),
-    fullName: Joi.string().trim().max(120),
-    firstName: Joi.string().trim().max(60),
+    fullName: Joi.string().trim().max(120).allow(""),
+    firstName: Joi.string().trim().max(60).allow(""),
     lastName: Joi.string().trim().max(60).allow(""),
     email: Joi.string().email().required(),
-    phoneNumber: Joi.string().trim().max(30),
-    address: Joi.string().trim().max(200),
+    // Optional in the form (no required-field marker in the UI), so an empty
+    // string from a field the visitor left blank must be accepted, not
+    // rejected - Joi treats "" as invalid for a plain .string() by default.
+    phoneNumber: Joi.string().trim().max(30).allow(""),
+    address: Joi.string().trim().max(200).allow(""),
     message: Joi.string().trim().min(1).max(2000).required(),
   }),
 };
