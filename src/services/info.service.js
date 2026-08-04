@@ -328,10 +328,21 @@ const getPublicStatus = async () => {
   const totalClient = Math.floor((totalUsers * 60) / 100);
   const happyClient = Math.floor((totalUsers * 10) / 100);
 
+  // `district` is left null on every existing listing (verified against the
+  // live database) even though the model comment calls it the structured
+  // field - `city` is what property creation actually populates, so it's
+  // the reliable one to count distinct values from.
+  const cities = await Property.distinct("city", {
+    isDeleted: false,
+    city: { $nin: [null, ""] },
+  });
+  const totalCities = cities.length;
+
   return {
     totalProperty,
     totalClient,
     happyClient,
+    totalCities,
   };
 };
 
