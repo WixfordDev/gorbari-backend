@@ -21,6 +21,7 @@ const usersData = [
     password: "1Qazxsw2$",
     role: "admin",
     isEmailVerified: true,
+    profileImage: "/uploads/users/admin1.png",
   },
   {
     _id: IDS.agent,
@@ -30,6 +31,7 @@ const usersData = [
     password: "1Qazxsw2$",
     role: "agent",
     isEmailVerified: true,
+    profileImage: "/uploads/users/agent1.png",
   },
   {
     _id: IDS.user,
@@ -40,6 +42,7 @@ const usersData = [
     password: "1Qazxsw2$",
     role: "user",
     isEmailVerified: true,
+    profileImage: "/uploads/users/user1.png",
   },
 ];
 

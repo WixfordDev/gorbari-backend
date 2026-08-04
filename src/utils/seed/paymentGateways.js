@@ -6,23 +6,23 @@ const paymentGatewaysData = [
   {
     createdBy: IDS.admin,
     name: "bKash",
-    logo: "https://res.cloudinary.com/demo/image/upload/v1/logo-bkash.png",
+    logo: "/uploads/other/bkash.png",
     status: "active",
-    address: "Bikram Tower, Level 13, 3/A Bir Uttam, Dhaka 1212",
+    address: "123 456 789",
   },
   {
     createdBy: IDS.admin,
     name: "Nagad",
-    logo: "https://res.cloudinary.com/demo/image/upload/v1/logo-nagad.png",
+    logo: "/uploads/other/nagad.png",
     status: "active",
-    address: "NBL Bhaban (Level 12), 40 Kawran Bazar, Dhaka 1215",
+    address: "123 456 789",
   },
   {
     createdBy: IDS.admin,
     name: "Rocket",
-    logo: "https://res.cloudinary.com/demo/image/upload/v1/logo-rocket.png",
+    logo: "/uploads/other/rocket.png",
     status: "inactive",
-    address: "Dutch-Bangla Bank Limited, Head Office, Dhaka 1000",
+    address: "123 456 789",
   },
 ];
 
