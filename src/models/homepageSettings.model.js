@@ -18,11 +18,24 @@ const homepageSettingsSchema = new mongoose.Schema(
         ref: "Property",
       },
     ],
-    // Rich HTML for the "Explore & Find Your Dream Home" section's text
-    // panel (heading, copy, feature list) - admin-authored, like AboutUs.
+    // Plain-text heading/subheading for the "Explore & Find Your Dream Home"
+    // section, editable separately from the rich-text body below them so the
+    // admin can't accidentally break their styling/size.
+    dreamHomeHeading: {
+      type: String,
+      default: "Explore & Find Your Dream Home",
+    },
+    dreamHomeSubheading: {
+      type: String,
+      default:
+        "We believe there's a perfect home for everyone. Discover our platform's powerful features.",
+    },
+    // Rich HTML for the rest of that section's text panel (quote, feature
+    // list, etc.) - admin-authored, like AboutUs.
     dreamHomeContent: {
       type: String,
-      default: "",
+      default:
+        "<blockquote>We believe there's a perfect home for everybody, no matter the budget.</blockquote>",
     },
   },
   {

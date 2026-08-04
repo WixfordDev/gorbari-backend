@@ -294,7 +294,9 @@ const getHomepageSettings = async () => {
   return {
     heroProperties: heroDefaults,
     dreamHomeProperties: dreamHomeDefaults,
-    dreamHomeContent: "",
+    dreamHomeHeading: HomepageSettings.schema.path("dreamHomeHeading").defaultValue,
+    dreamHomeSubheading: HomepageSettings.schema.path("dreamHomeSubheading").defaultValue,
+    dreamHomeContent: HomepageSettings.schema.path("dreamHomeContent").defaultValue,
   };
 };
 
