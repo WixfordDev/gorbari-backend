@@ -199,6 +199,30 @@ const queryAboutUs = catchAsync(async (req, res) => {
     );
 });
 
+const getHomepageSettings = catchAsync(async (req, res) => {
+  const result = await infoService.getHomepageSettings();
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Homepage settings",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: result,
+    })
+  );
+});
+
+const updateHomepageSettings = catchAsync(async (req, res) => {
+  const result = await infoService.updateHomepageSettings(req.body);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Homepage settings updated",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: result,
+    })
+  );
+});
+
 module.exports = {
   createFavorite,
   getFavorites,
@@ -216,4 +240,7 @@ module.exports = {
   queryTerms,
   createAboutUs,
   queryAboutUs,
+
+  getHomepageSettings,
+  updateHomepageSettings,
 };

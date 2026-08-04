@@ -1,5 +1,5 @@
 const httpStatus = require("http-status");
-const { Favorite, Property, Transaction, User, AboutUs, TermsAndCondition, PrivacyPolicy } = require("../models");
+const { Favorite, Property, Transaction, User, AboutUs, TermsAndCondition, PrivacyPolicy, HomepageSettings } = require("../models");
 const ApiError = require("../utils/ApiError");
 const propertyService = require("./property.service");
 const he = require("he");
@@ -271,6 +271,33 @@ const queryAboutUs = async () => {
   return newAboutUs;
 };
 
+// Admin-curated properties for the homepage's hero and "Dream Home" sections,
+// plus the free-form content that goes with the latter. Same upsert/singleton
+// pattern as AboutUs/Privacy/Terms.
+const PROPERTY_SHOWCASE_FIELDS = "title slug images price status type";
+
+const getHomepageSettings = async () => {
+  const settings = await HomepageSettings.findOne()
+    .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS);
+  return settings;
+};
+
+const updateHomepageSettings = async (body) => {
+  if (body.dreamHomeContent) {
+    body.dreamHomeContent = he.decode(body.dreamHomeContent);
+  }
+
+  const existing = await HomepageSettings.findOne();
+  const saved = existing
+    ? await Object.assign(existing, body).save()
+    : await HomepageSettings.create(body);
+
+  return HomepageSettings.findById(saved._id)
+    .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS);
+};
+
 const getPublicStatus = async () => {
   const totalProperty = await Property.countDocuments({
     isDeleted: false,
@@ -311,4 +338,7 @@ module.exports = {
   queryTerms,
   createAboutUs,
   queryAboutUs,
+
+  getHomepageSettings,
+  updateHomepageSettings,
 };
