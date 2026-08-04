@@ -54,7 +54,7 @@ const queryFavorites = async (filter, options, userId) => {
     .skip(skip)
     .limit(limitNum)
     .populate("user", "fullName email profileImage")
-    .populate("property", "title slug type price location images status");
+    .populate("property", "title slug type price address city images status bedrooms bathrooms areaSqFt");
 
   const totalResults = await Favorite.countDocuments({
     ...filter,
