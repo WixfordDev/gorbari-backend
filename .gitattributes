@@ -1,3 +1,13 @@
 # Convert text file line endings to lf
 * text eol=lf
 *.js text
+
+# `* text eol=lf` above applies to binaries too, and line-ending conversion
+# corrupts them. Mark image formats binary so git copies the bytes verbatim.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary

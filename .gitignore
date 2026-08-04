@@ -18,8 +18,15 @@ coverage
 app.log*
 
 # User-uploaded files are runtime data and stay out of git, but committed
-# static assets (e.g. the email logo) must ship with the code.
+# static assets (e.g. the email logo, the default avatar) must ship with the
+# code. The default avatar is referenced by the User model's profileImage
+# default, so a clone without it serves 404s for every user who never uploaded
+# a picture. Directory rules must be re-included before a file inside them can
+# be, hence the /uploads/ and /uploads/users/ lines.
 /public/**
 !/public/images/
 !/public/images/logo.png
+!/public/uploads/
+!/public/uploads/users/
+!/public/uploads/users/user.png
 /dist
