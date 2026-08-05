@@ -24,12 +24,18 @@ const homepageSettingsSchema = new mongoose.Schema(
         ref: "Property",
       },
     ],
-    // Plain-text heading/subheading for the "Explore & Find Your Dream Home"
-    // section, editable separately from the rich-text body below them so the
-    // admin can't accidentally break their styling/size.
+    // Heading/subheading for the "Explore & Find Your Dream Home" section.
+    // Inline HTML only (bold/italic/colour) — sanitised on write in
+    // info.service.js, which strips block tags so the admin can emphasise a
+    // word without altering the fixed responsive type scale the layout relies
+    // on. The rich-text body below them keeps structural tags.
+    //
+    // The accent span matches the convention every other section header uses
+    // (Meet Our Expert <accent>Agents</accent>, Featured <accent>Properties</accent>).
     dreamHomeHeading: {
       type: String,
-      default: "Explore & Find Your Dream Home",
+      default:
+        'Explore &amp; Find Your <span class="text-gradient">Dream Home</span>',
     },
     dreamHomeSubheading: {
       type: String,
@@ -41,7 +47,7 @@ const homepageSettingsSchema = new mongoose.Schema(
     dreamHomeContent: {
       type: String,
       default:
-        "<blockquote>We believe there's a perfect home for everybody, no matter the budget.</blockquote>",
+        "<blockquote>We believe there's a perfect home for everybody, no matter the budget. That's why we always find the best homes for your budget.</blockquote>",
     },
   },
   {

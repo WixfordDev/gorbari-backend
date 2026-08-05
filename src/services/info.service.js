@@ -3,6 +3,7 @@ const { Favorite, Property, Transaction, User, AboutUs, TermsAndCondition, Priva
 const ApiError = require("../utils/ApiError");
 const propertyService = require("./property.service");
 const he = require("he");
+const { sanitizeInlineHtml, sanitizeRichHtml } = require("../utils/sanitizeHtml");
 
 const createFavorite = async (favoriteBody) => {
   if (favoriteBody.property) {
@@ -307,8 +308,21 @@ const getHomepageSettings = async () => {
 };
 
 const updateHomepageSettings = async (body) => {
+  // Decode before sanitising, not after: the editor posts entity-encoded
+  // markup, so sanitising first would inspect inert text and then decode it
+  // back into live tags that were never checked.
+  //
+  // Heading and subheading are limited to inline formatting so the admin can
+  // colour or emphasise a word without altering the fixed responsive type
+  // scale the section layout depends on. The body panel keeps block tags.
+  if (body.dreamHomeHeading) {
+    body.dreamHomeHeading = sanitizeInlineHtml(he.decode(body.dreamHomeHeading));
+  }
+  if (body.dreamHomeSubheading) {
+    body.dreamHomeSubheading = sanitizeInlineHtml(he.decode(body.dreamHomeSubheading));
+  }
   if (body.dreamHomeContent) {
-    body.dreamHomeContent = he.decode(body.dreamHomeContent);
+    body.dreamHomeContent = sanitizeRichHtml(he.decode(body.dreamHomeContent));
   }
 
   const existing = await HomepageSettings.findOne();
