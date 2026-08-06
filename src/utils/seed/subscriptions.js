@@ -5,12 +5,12 @@ const { IDS } = require("./users");
 const subscriptionsData = [
   {
     createdBy: IDS.admin,
-    title: "Free",
+    title: "Basic",
     subTitle: "For getting started",
     description: "List a single property and explore the platform.",
     features: ["1 Property Listing", "1 Photo per Property", "Email Support"],
     type: "monthly",
-    amount: 0,
+    amount: 600,
     days: 30,
     propertyPromotionCradit: 0,
     propertyImageCradit: 1,
