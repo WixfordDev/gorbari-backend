@@ -5,7 +5,6 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "build": "webpack --mode=production",
     "seed": "node src/utils/seed/index.js",
     "seed:reset": "node src/utils/seed/index.js --reset",
     "backfill:slugs": "node src/utils/seed/backfillPropertySlugs.js",
@@ -53,9 +52,6 @@
     "xss-clean": "^0.1.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "webpack": "^5.90.0",
-    "webpack-cli": "^5.1.4",
-    "webpack-node-externals": "^3.0.0"
+    "nodemon": "^3.0.2"
   }
 }
