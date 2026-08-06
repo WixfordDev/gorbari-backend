@@ -1,9 +1,10 @@
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 const { Contact, Property, User } = require("../models");
-const { sendContactsUsEmail, sendEmailInBackground } = require("./email.service");
+const { sendContactsUsEmail, sendLeadReplyEmail, sendEmailInBackground } = require("./email.service");
 const userService = require("./user.service");
 const notificationService = require("./notification.service");
+const config = require("../config/config");
 const logger = require("../config/logger");
 
 const escapeRegex = require("../utils/escapeRegex");
@@ -236,9 +237,9 @@ const updateContactStatus = async (contactId, status) => {
 // never claim to be the other party.
 const addReply = async (contactId, senderId, message) => {
   const contact = await Contact.findById(contactId)
-    .populate("user", "fullName")
-    .populate("propertyWoner", "fullName")
-    .populate("property", "title");
+    .populate("user", "fullName email")
+    .populate("propertyWoner", "fullName email")
+    .populate("property", "title slug");
 
   if (!contact) {
     throw new ApiError(httpStatus.NOT_FOUND, "Contact not found");
@@ -262,6 +263,7 @@ const addReply = async (contactId, senderId, message) => {
   // The enquiry is already updated, so a notification failure must not fail
   // the request - it would only mean the bell icon misses this one entry.
   const recipientId = isOwnerReplying ? contact.user?._id : contact.propertyWoner?._id;
+  const recipientEmail = isOwnerReplying ? contact.user?.email : contact.propertyWoner?.email;
   if (recipientId) {
     const propertyTitle = contact.property?.title || "a property";
     const senderName = isOwnerReplying ? contact.propertyWoner?.fullName : contact.user?.fullName;
@@ -277,6 +279,22 @@ const addReply = async (contactId, senderId, message) => {
       });
     } catch (err) {
       logger.error("Failed to create reply notification: %s", err.message || err);
+    }
+
+    // The reply is already persisted, so a mail failure must not fail the
+    // request - notify in the background and let the service log any problem.
+    if (recipientEmail) {
+      const propertyUrl = contact.property?.slug
+        ? `${config.websiteUrl}/properties/${contact.property.slug}`
+        : null;
+      sendEmailInBackground(() =>
+        sendLeadReplyEmail(recipientEmail, {
+          senderName,
+          propertyTitle,
+          message,
+          propertyUrl,
+        })
+      );
     }
   }
 

@@ -2,7 +2,8 @@ const httpStatus = require("http-status");
 const { User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { generateOneTimeCode } = require("../utils/oneTimeCode");
-const { sendEmailVerification } = require("./email.service");
+const { sendEmailVerification, sendNewUserRegistrationEmail, sendEmailInBackground } = require("./email.service");
+const config = require("../config/config");
 
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
@@ -16,6 +17,19 @@ const createUser = async (userBody) => {
   // delivery failure has to reach the client instead of leaving them waiting
   // for an email that will never arrive.
   await sendEmailVerification(user.email, oneTimeCode);
+
+  // The account is already created, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  if (config.email.contactUsRecipient) {
+    sendEmailInBackground(() =>
+      sendNewUserRegistrationEmail(config.email.contactUsRecipient, {
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        phoneNumber: user.phoneNumber,
+      })
+    );
+  }
 
   return user;
 };

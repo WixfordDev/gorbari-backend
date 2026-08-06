@@ -287,6 +287,230 @@ const sendContactsUsEmail = async (allData) => {
 
 
 
+/**
+ * Notify one side of a lead conversation that the other side wrote back.
+ *
+ * Fired from `addReply`: the agent replying to an enquiry is the common case,
+ * and a sender following up puts it back on the agent's plate. The recipient
+ * (the side who did not just write) is resolved by the caller.
+ */
+const sendLeadReplyEmail = async (
+  to,
+  { senderName, propertyTitle, message, propertyUrl }
+) => {
+  const subject = `New reply about "${headerSafe(propertyTitle || "your enquiry", 55)}" — Ghorbari`;
+
+  const html = `
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
+    </div>
+
+    <div style="background: linear-gradient(135deg, #FF6625, #d3541d); padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">${escapeHtml(senderName || "Someone")} replied about ${escapeHtml(propertyTitle || "your enquiry")}</h2>
+    </div>
+
+    <div style="padding: 24px 0 8px;">
+      <p style="color:#4b5563; margin: 0 0 16px;">There is a new message in your conversation. You can reply directly from your dashboard.</p>
+    </div>
+
+    <div style="margin-top: 8px; padding: 20px; background-color: #f9fafb; border-left: 4px solid #FF6625; border-radius: 8px;">
+      <p style="margin: 0 0 8px; color: #6b7280; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Message</p>
+      <p style="margin: 0; color: #111827; font-size: 1rem; line-height: 1.6; white-space: pre-line;">${escapeHtml(message)}</p>
+    </div>
+
+    ${
+      propertyUrl
+        ? `<div style="text-align: center; margin-top: 28px;">
+      <a href="${propertyUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6625, #d3541d); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600;">View listing</a>
+    </div>`
+        : ""
+    }
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">Sent because you are part of a conversation on Ghorbari.</p>
+    </div>
+  </div>
+</body>`;
+
+  await sendEmail(to, subject, html);
+};
+
+/**
+ * Notify an agent whether their subscription payment was approved or rejected.
+ *
+ * `status` is "approved" or "rejected"; the rest of the copy and the accent
+ * color are derived from it.
+ */
+const sendSubscriptionDecisionEmail = async (to, { status, planTitle }) => {
+  const isApproved = status === "approved";
+  const subject = isApproved
+    ? "Subscription approved — Ghorbari"
+    : "Subscription rejected — Ghorbari";
+  const heading = isApproved ? "Your subscription is active" : "Subscription payment rejected";
+  const accent = isApproved ? "#059669" : "#DC2626";
+  const body = isApproved
+    ? `Your payment for the ${planTitle || "subscription"} plan has been approved. You can now enjoy all its benefits.`
+    : `Your payment for the ${planTitle || "subscription"} plan could not be approved. Please contact support or try again.`;
+
+  const html = `
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
+    </div>
+
+    <div style="background: ${accent}; padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">${heading}</h2>
+    </div>
+
+    <div style="padding: 24px 0 8px;">
+      <p style="color:#4b5563; margin: 0; line-height: 1.6;">${escapeHtml(body)}</p>
+    </div>
+
+    ${
+      planTitle
+        ? `<div style="margin-top: 16px; padding: 20px; background-color: #f9fafb; border-left: 4px solid ${accent}; border-radius: 8px;">
+      <p style="margin: 0; color: #6b7280; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Plan</p>
+      <p style="margin: 4px 0 0; color: #111827; font-size: 1rem; font-weight: 600;">${escapeHtml(planTitle)}</p>
+    </div>`
+        : ""
+    }
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">Sent from the Ghorbari admin panel.</p>
+    </div>
+  </div>
+</body>`;
+
+  await sendEmail(to, subject, html);
+};
+
+/**
+ * Alert the admin when an agent purchases a subscription plan.
+ *
+ * Delivered to CONTACT_US_EMAIL, the same address that receives contact form
+ * submissions — the operator-facing inbox.
+ */
+const sendNewSubscriptionPurchaseEmail = async (
+  to,
+  { agentName, agentEmail, planTitle, amount, type }
+) => {
+  const subject = `New subscription purchase${agentName ? ` by ${headerSafe(agentName, 40)}` : ""} — Ghorbari`;
+
+  const html = `
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
+    </div>
+
+    <div style="background: linear-gradient(135deg, #FF6625, #d3541d); padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">New subscription purchase</h2>
+    </div>
+
+    <div style="padding: 24px 0 8px;">
+      <p style="color:#4b5563; margin: 0 0 16px;">An agent has submitted a subscription payment that is waiting for review.</p>
+      <table style="width: 100%; border-collapse: collapse;">
+        ${detailRow("👤", "Agent", agentName)}
+        ${detailRow("📧", "Email", agentEmail)}
+        ${detailRow("📋", "Plan", planTitle)}
+        ${detailRow("💰", "Amount", amount ? `৳${Number(amount).toLocaleString("en-IN")}` : "")}
+        ${detailRow("💳", "Method", type)}
+      </table>
+    </div>
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">Sent from the Ghorbari admin panel. Approve or reject this purchase from the transactions page.</p>
+    </div>
+  </div>
+</body>`;
+
+  await sendEmail(to, subject, html);
+};
+
+/**
+ * Alert the admin when an agent publishes a new property listing.
+ */
+const sendNewPropertyEmail = async (
+  to,
+  { title, district, agentName, agentEmail, propertyUrl }
+) => {
+  const subject = `New property listed${title ? `: ${headerSafe(title, 55)}` : ""} — Ghorbari`;
+
+  const html = `
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
+    </div>
+
+    <div style="background: linear-gradient(135deg, #FF6625, #d3541d); padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">A new property was listed</h2>
+    </div>
+
+    <div style="padding: 24px 0 8px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        ${detailRow("🏠", "Property", title)}
+        ${detailRow("📍", "District", district)}
+        ${detailRow("👤", "Agent", agentName)}
+        ${detailRow("📧", "Email", agentEmail)}
+      </table>
+    </div>
+
+    ${
+      propertyUrl
+        ? `<div style="text-align: center; margin-top: 28px;">
+      <a href="${propertyUrl}" style="display: inline-block; background: linear-gradient(135deg, #FF6625, #d3541d); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600;">View listing</a>
+    </div>`
+        : ""
+    }
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">Sent from the Ghorbari admin panel.</p>
+    </div>
+  </div>
+</body>`;
+
+  await sendEmail(to, subject, html);
+};
+
+/**
+ * Alert the admin when a new user account is created.
+ */
+const sendNewUserRegistrationEmail = async (to, { fullName, email, role, phoneNumber }) => {
+  const subject = `New user registered${fullName ? `: ${headerSafe(fullName, 55)}` : ""} — Ghorbari`;
+
+  const html = `
+<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 24px; background-color: #f9fafb; color: #111827;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 32px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
+    <div style="text-align: center; margin-bottom: 24px;">
+      <img src="${LOGO_URL}" alt="Ghorbari" style="max-width: 140px;">
+    </div>
+
+    <div style="background: linear-gradient(135deg, #FF6625, #d3541d); padding: 20px 24px; border-radius: 12px; color: #ffffff;">
+      <h2 style="font-size: 1.25rem; margin: 0; line-height: 1.5;">A new user has registered</h2>
+    </div>
+
+    <div style="padding: 24px 0 8px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        ${detailRow("👤", "Name", fullName)}
+        ${detailRow("📧", "Email", email)}
+        ${detailRow("🔑", "Role", role)}
+        ${detailRow("📞", "Phone", phoneNumber)}
+      </table>
+    </div>
+
+    <div style="text-align: center; padding: 16px; background-color: #f3f4f6; border-radius: 8px; margin-top: 24px;">
+      <p style="font-size: 0.8rem; color: #6b7280; margin: 0;">Sent from the Ghorbari admin panel.</p>
+    </div>
+  </div>
+</body>`;
+
+  await sendEmail(to, subject, html);
+};
+
 const sendSubAdminInvitationEmail = async (to, password, permissions, fullName) => {
   const subject = "You have been invited as Sub-Admin - Ghorbari";
   const permissionLabels = {
@@ -338,4 +562,9 @@ module.exports = {
   sendEmailVerification,
   sendContactsUsEmail,
   sendSubAdminInvitationEmail,
+  sendLeadReplyEmail,
+  sendSubscriptionDecisionEmail,
+  sendNewSubscriptionPurchaseEmail,
+  sendNewPropertyEmail,
+  sendNewUserRegistrationEmail,
 };

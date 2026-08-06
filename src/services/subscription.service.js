@@ -6,6 +6,8 @@ const mongoose = require("mongoose");
 const { getUserById } = require("./user.service");
 const transactionService = require("./transaction.service");
 const notificationService = require("./notification.service");
+const { sendSubscriptionDecisionEmail, sendNewSubscriptionPurchaseEmail, sendEmailInBackground } = require("./email.service");
+const config = require("../config/config");
 const logger = require("../config/logger");
 
 const createSubscription = async (subscriptionBody) => {
@@ -117,6 +119,21 @@ const takeSubscriptions = async (userId, subData) => {
 
   await user.save();
 
+  // The transaction is already created, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  // The admin reviews this purchase from the transactions page.
+  if (config.email.contactUsRecipient) {
+    sendEmailInBackground(() =>
+      sendNewSubscriptionPurchaseEmail(config.email.contactUsRecipient, {
+        agentName: user.fullName,
+        agentEmail: user.email,
+        planTitle: subscription.title,
+        amount: transaction.amount,
+        type: transaction.type,
+      })
+    );
+  }
+
   return transaction;
 };
 
@@ -159,6 +176,15 @@ const approvedSubscriptions = async (transactionId, approvedBy) => {
     logger.error("Failed to create subscription-approved notification: %s", err.message || err);
   }
 
+  // The transaction is already approved, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  const planTitle = transaction.subscriptionId?.title;
+  if (user.email) {
+    sendEmailInBackground(() =>
+      sendSubscriptionDecisionEmail(user.email, { status: "approved", planTitle })
+    );
+  }
+
   return transaction;
 };
 
@@ -198,6 +224,15 @@ const rejectSubscriptions = async (transactionId, rejectedBy) => {
     });
   } catch (err) {
     logger.error("Failed to create subscription-rejected notification: %s", err.message || err);
+  }
+
+  // The transaction is already rejected, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  const planTitle = transaction.subscriptionId?.title;
+  if (user.email) {
+    sendEmailInBackground(() =>
+      sendSubscriptionDecisionEmail(user.email, { status: "rejected", planTitle })
+    );
   }
 
   return transaction;

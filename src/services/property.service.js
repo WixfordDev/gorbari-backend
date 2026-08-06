@@ -1,5 +1,5 @@
 const httpStatus = require("http-status");
-const { Property, Favorite } = require("../models");
+const { Property, Favorite, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 const { buildUniqueSlug } = require("../utils/slug");
@@ -9,6 +9,8 @@ const {
   DIVISION_NAMES,
 } = require("../config/bangladeshGeo");
 const notificationService = require("./notification.service");
+const { sendNewPropertyEmail, sendEmailInBackground } = require("./email.service");
+const config = require("../config/config");
 const logger = require("../config/logger");
 
 /**
@@ -206,6 +208,27 @@ const createProperty = async (propertyBody) => {
   notifyFavouriteAreaUsers(property).catch((err) =>
     logger.error("Favourite-area notification pass failed for property %s: %s", property._id, err.message || err)
   );
+
+  // The listing is already saved, so a mail failure must not fail the create
+  // request - notify in the background and let the service log any problem.
+  // The admin reviews every new listing, so the creator's identity is fetched
+  // here rather than trusting a client-supplied name/email.
+  if (config.email.contactUsRecipient) {
+    sendEmailInBackground(async () => {
+      const creator = property.createdBy
+        ? await User.findById(property.createdBy).select("fullName email")
+        : null;
+      await sendNewPropertyEmail(config.email.contactUsRecipient, {
+        title: property.title,
+        district: property.district,
+        agentName: creator?.fullName,
+        agentEmail: creator?.email,
+        propertyUrl: property.slug
+          ? `${config.websiteUrl}/properties/${property.slug}`
+          : null,
+      });
+    });
+  }
 
   return property;
 };
