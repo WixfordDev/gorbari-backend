@@ -77,7 +77,7 @@ const login = catchAsync(async (req, res) => {
     await user.save();
   }
 
-  const tokens = await tokenService.generateAuthTokens(user);
+  const tokens = await tokenService.generateAuthTokens(user, undefined, req.body.rememberMe === true);
   res.status(httpStatus.OK).json(
     response({
       message: "Login Successful",
@@ -100,8 +100,15 @@ const logout = catchAsync(async (req, res) => {
 });
 
 const refreshTokens = catchAsync(async (req, res) => {
-  // const tokens = await authService.refreshAuth(req.body.refreshToken);
-  // res.send({ ...tokens });
+  const tokens = await authService.refreshAuth(req.body.refreshToken);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Tokens Refreshed",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: { tokens },
+    })
+  );
 });
 
 const forgotPassword = catchAsync(async (req, res) => {

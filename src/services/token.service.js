@@ -44,11 +44,16 @@ const verifyToken = async (token, type) => {
 };
 
 
-const generateAuthTokens = async (user, activityId) => {
-  const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
+const generateAuthTokens = async (user, activityId, rememberMe = false) => {
+  // "Remember me" issues a much longer-lived access token (days), while a plain
+  // login keeps the short one (minutes) so the session dies quickly if it is
+  // stolen. The refresh token is unaffected in both cases.
+  const accessTokenExpires = rememberMe
+    ? moment().add(config.jwt.rememberAccessExpirationDays, "days")
+    : moment().add(config.jwt.accessExpirationMinutes, "minutes");
   const accessToken = generateToken(activityId, user.id, accessTokenExpires, tokenTypes.ACCESS);
 
-  const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, 'days');
+  const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, "days");
   const refreshToken = generateToken(activityId, user.id, refreshTokenExpires, tokenTypes.REFRESH);
   await saveToken(refreshToken, user.id, refreshTokenExpires, tokenTypes.REFRESH);
 

@@ -18,6 +18,7 @@ const login = {
     email: Joi.string().required(),
     password: Joi.string().required(),
     fcmToken: Joi.string(),
+    rememberMe: Joi.boolean(),
   }),
 };
 
