@@ -115,6 +115,8 @@ const applyContactFilters = (query, filter) => {
   // could not be distinguished from any value containing it, and left the door
   // open to a caller passing a pattern instead of a value.
   const exactFields = ["type", "intent", "status"];
+  // ObjectId references must match exactly and must not be regex-able.
+  const idFields = ["property"];
 
   for (const key in filter) {
     if (!filter[key]) continue;
@@ -124,6 +126,8 @@ const applyContactFilters = (query, filter) => {
     if (searchableFields.includes(key)) {
       query[key] = { $regex: escapeRegex(filter[key]), $options: "i" };
     } else if (exactFields.includes(key)) {
+      query[key] = filter[key];
+    } else if (idFields.includes(key)) {
       query[key] = filter[key];
     }
   }

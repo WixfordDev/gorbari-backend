@@ -115,6 +115,7 @@ const getSelfContacts = catchAsync(async (req, res) => {
     "intent",
     "status",
     "search",
+    "property",
   ]);
 
   const options = pick(req.query, ["sortBy", "limit", "page"]);
