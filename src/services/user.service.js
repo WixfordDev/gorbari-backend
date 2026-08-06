@@ -5,6 +5,21 @@ const { generateOneTimeCode } = require("../utils/oneTimeCode");
 const { sendEmailVerification, sendNewUserRegistrationEmail, sendEmailInBackground } = require("./email.service");
 const config = require("../config/config");
 
+// The account is already created, so a mail failure must not fail the request -
+// notify in the background and let the service log any problem. Shared by
+// createUser (brand-new account) and isUpdateUser (re-created account).
+const sendAdminNewUserAlert = (user) => {
+  if (!config.email.contactUsRecipient) return;
+  sendEmailInBackground(() =>
+    sendNewUserRegistrationEmail(config.email.contactUsRecipient, {
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+    })
+  );
+};
+
 const createUser = async (userBody) => {
   if (await User.isEmailTaken(userBody.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Email already taken");
@@ -18,18 +33,7 @@ const createUser = async (userBody) => {
   // for an email that will never arrive.
   await sendEmailVerification(user.email, oneTimeCode);
 
-  // The account is already created, so a mail failure must not fail the
-  // request - notify in the background and let the service log any problem.
-  if (config.email.contactUsRecipient) {
-    sendEmailInBackground(() =>
-      sendNewUserRegistrationEmail(config.email.contactUsRecipient, {
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phoneNumber: user.phoneNumber,
-      })
-    );
-  }
+  sendAdminNewUserAlert(user);
 
   return user;
 };
@@ -121,6 +125,9 @@ const isUpdateUser = async (userId, updateBody) => {
   // Awaited for the same reason as in createUser: the code is the only way to
   // finish verifying this account.
   await sendEmailVerification(user.email, oneTimeCode);
+
+  // A re-created account is still a new signup worth surfacing to the admin.
+  sendAdminNewUserAlert(user);
 
   return user;
 };
