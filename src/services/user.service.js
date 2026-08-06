@@ -43,21 +43,28 @@ const createUser = async (userBody) => {
 const queryUsers = async (filter, options) => {
   const query = {};
 
-  // Loop through each filter field and add conditions if they exist
+  // Text fields (name/email/username) are searched with a single term that may
+  // match any of them, so they are grouped under $or instead of being ANDed
+  // together (the admin panel sends the same term for both name and email).
+  const textSearch = [];
+  for (const key of ["fullName", "email", "username"]) {
+    if (filter[key] !== undefined && filter[key] !== "") {
+      textSearch.push({ [key]: { $regex: filter[key], $options: "i" } });
+    }
+  }
+  if (textSearch.length > 0) {
+    query.$or = textSearch;
+  }
+
+  // Remaining fields (role, gender, ...) are exact matches.
   for (const key of Object.keys(filter)) {
-    if (
-      (key === "fullName" || key === "email" || key === "username") &&
-      filter[key] !== ""
-    ) {
-      query[key] = { $regex: filter[key], $options: "i" }; // Case-insensitive regex search for name
-    } else if (filter[key] !== "") {
+    if (key === "fullName" || key === "email" || key === "username") continue;
+    if (filter[key] !== "") {
       query[key] = filter[key];
     }
   }
 
   const users = await User.paginate(query, options);
-
-  // Convert height and age to feet/inches here...
 
   return users;
 };
