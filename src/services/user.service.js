@@ -40,7 +40,9 @@ const createUser = async (userBody) => {
 
 
 
-const queryUsers = async (filter, options) => {
+// Shared by queryUsers (list pagination) and getUsersStats (header cards) so the
+// two stay consistent about which users a search/role filter actually matches.
+const buildUserQuery = (filter) => {
   const query = {};
 
   // Text fields (name/email/username) are searched with a single term that may
@@ -64,9 +66,44 @@ const queryUsers = async (filter, options) => {
     }
   }
 
-  const users = await User.paginate(query, options);
+  return query;
+};
+
+const queryUsers = async (filter, options) => {
+  const users = await User.paginate(buildUserQuery(filter), options);
 
   return users;
+};
+
+// Counts for the admin header cards. Mirrors the status logic the table uses:
+// a subscription is Active while it is 'active' or 'trialing', a 'pending'
+// payment has not been approved yet, and a suspended account is one flagged as
+// blocked. Counts respect the same role/search filter as the table, so the
+// cards always match the rows the admin is looking at.
+const getUsersStats = async (filter) => {
+  const [stats] = await User.aggregate([
+    { $match: buildUserQuery(filter) },
+    {
+      $group: {
+        _id: null,
+        active: {
+          $sum: { $cond: [{ $in: ["$subscription.status", ["active", "trialing"]] }, 1, 0] },
+        },
+        pending: {
+          $sum: { $cond: [{ $eq: ["$subscription.status", "pending"] }, 1, 0] },
+        },
+        suspended: {
+          $sum: { $cond: [{ $eq: ["$isBlocked", true] }, 1, 0] },
+        },
+      },
+    },
+  ]);
+
+  return {
+    active: stats?.active || 0,
+    pending: stats?.pending || 0,
+    suspended: stats?.suspended || 0,
+  };
 };
 
 
@@ -168,6 +205,7 @@ const resendEmailVerification = async (email) => {
 module.exports = {
   createUser,
   queryUsers,
+  getUsersStats,
   getUserById,
   getUserByEmail,
   updateUserById,

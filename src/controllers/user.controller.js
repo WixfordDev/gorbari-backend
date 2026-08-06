@@ -22,12 +22,13 @@ const getUsers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ["fullName", "email", "role", "gender"]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
   const result = await userService.queryUsers(filter, options);
+  const stats = await userService.getUsersStats(filter);
   res.status(httpStatus.OK).json(
     response({
       message: "All Users",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: result,
+      data: { ...result, stats },
     })
   );
 });
