@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
+    "build": "echo \"No build step required - this is a plain Node/Express server, nothing to compile.\"",
     "seed": "node src/utils/seed/index.js",
     "seed:reset": "node src/utils/seed/index.js --reset",
     "backfill:slugs": "node src/utils/seed/backfillPropertySlugs.js",
