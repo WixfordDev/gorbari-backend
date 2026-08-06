@@ -1,22 +1,236 @@
 const httpStatus = require("http-status");
-const { Property } = require("../models");
+const { Property, Favorite, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
+const { buildUniqueSlug } = require("../utils/slug");
+const {
+  findDivisionByDistrict,
+  isValidDistrictForDivision,
+  DIVISION_NAMES,
+} = require("../config/bangladeshGeo");
+const notificationService = require("./notification.service");
+const { sendNewPropertyEmail, sendEmailInBackground } = require("./email.service");
+const config = require("../config/config");
+const logger = require("../config/logger");
+
+/**
+ * Reconcile the division/district pair before it reaches the database.
+ *
+ * A district belongs to exactly one division, so the district is treated as
+ * authoritative and the division is derived from it. That lets a client send
+ * only a district — which is what happens when the user picks the district
+ * first, or when Google Places returns one — and still store a consistent pair.
+ *
+ * A mismatched pair is a contradiction rather than a preference, so it is
+ * rejected instead of silently corrected: quietly rewriting the division would
+ * publish the property somewhere the agent did not choose.
+ */
+const normalizeAdministrativeArea = (body) => {
+  const district = body.district ? String(body.district).trim() : null;
+  const division = body.division ? String(body.division).trim() : null;
+
+  if (!district && !division) return;
+
+  if (district) {
+    const owningDivision = findDivisionByDistrict(district);
+    if (!owningDivision) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Unknown district "${district}"`
+      );
+    }
+
+    if (division && !isValidDistrictForDivision(district, division)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `District "${district}" belongs to ${owningDivision} division, not ${division}`
+      );
+    }
+
+    // Canonical casing, so a value typed as "dhaka" is stored as "Dhaka" and
+    // an exact-match filter on division keeps working.
+    body.district = findCanonicalDistrict(district);
+    body.division = owningDivision;
+    return;
+  }
+
+  if (!DIVISION_NAMES.some((name) => name.toLowerCase() === division.toLowerCase())) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Unknown division "${division}"`);
+  }
+  body.division = DIVISION_NAMES.find(
+    (name) => name.toLowerCase() === division.toLowerCase()
+  );
+};
+
+const findCanonicalDistrict = (district) => {
+  const owningDivision = findDivisionByDistrict(district);
+  if (!owningDivision) return district;
+  const { getDistrictsByDivision } = require("../config/bangladeshGeo");
+  return (
+    getDistrictsByDivision(owningDivision).find(
+      (name) => name.toLowerCase() === district.trim().toLowerCase()
+    ) || district
+  );
+};
+
+// Number of times a create is retried when the unique slug index rejects the
+// insert. A retry only happens when a concurrent request claimed the same slug
+// between our uniqueness check and the insert, so the window is tiny and a
+// couple of attempts is ample.
+const SLUG_RETRY_LIMIT = 3;
+
+const slugExists = async (slug) => Boolean(await Property.exists({ slug }));
+
+/**
+ * Fields an agent may legitimately leave blank.
+ *
+ * A property with no stated price or room count is a real listing — land has no
+ * bedrooms, and a price is often "on request" — so these are stored as null
+ * rather than 0. Zero is kept meaningful: a studio genuinely has 0 bedrooms,
+ * and the listing pages show a stated 0 while hiding an unstated one.
+ */
+const OPTIONAL_NUMERIC_FIELDS = ["price", "areaSqFt", "lotSize", "bedrooms", "bathrooms"];
+
+/**
+ * Turn a cleared form field back into null.
+ *
+ * Requests arrive as multipart/form-data, which has no concept of a type: every
+ * value is a string, and a field the user emptied comes through as "". Passing
+ * that to a Number path throws a CastError, so the whole update would fail
+ * because someone deleted a price.
+ */
+const normalizeOptionalNumbers = (body) => {
+  OPTIONAL_NUMERIC_FIELDS.forEach((field) => {
+    if (!(field in body)) return;
+    const value = body[field];
+    if (value === "" || value === null || value === undefined) {
+      body[field] = null;
+      return;
+    }
+    if (typeof value === "string" && value.trim() === "") {
+      body[field] = null;
+    }
+  });
+};
+
+/**
+ * There is no "favourite location" concept of its own - users only favourite
+ * individual properties. This derives interest in an area from that: anyone
+ * who has favourited a property in the same district as this new one is
+ * assumed to care about that district, and gets notified.
+ */
+const notifyFavouriteAreaUsers = async (property) => {
+  if (!property.district) return;
+
+  const propertiesInDistrict = await Property.find({
+    district: property.district,
+    isDeleted: false,
+    _id: { $ne: property._id },
+  }).select("_id");
+
+  if (propertiesInDistrict.length === 0) return;
+
+  const favourites = await Favorite.find({
+    property: { $in: propertiesInDistrict.map((p) => p._id) },
+    isDeleted: false,
+  }).select("user");
+
+  const interestedUserIds = new Set(
+    favourites
+      .map((f) => String(f.user))
+      // Don't notify the lister about their own new listing.
+      .filter((id) => id !== String(property.createdBy))
+  );
+
+  await Promise.all(
+    [...interestedUserIds].map((userId) =>
+      notificationService
+        .createNotification({
+          userId,
+          sendBy: property.createdBy,
+          title: "New property in your favourite area",
+          content: `A new listing "${property.title}" was just added in ${property.district}.`,
+          type: "new-property",
+          priority: "low",
+        })
+        .catch((err) =>
+          logger.error(
+            "Failed to notify favourite-area user %s for property %s: %s",
+            userId,
+            property._id,
+            err.message || err
+          )
+        )
+    )
+  );
+};
 
 const createProperty = async (propertyBody) => {
+  normalizeAdministrativeArea(propertyBody);
+  normalizeOptionalNumbers(propertyBody);
+
   // Calculate 10% commission from price
   if (propertyBody.price) {
     const commissionPercentage = 10;
     const commissionAmount = propertyBody.price * (commissionPercentage / 100);
-    
+
     propertyBody.commission = {
       percentage: commissionPercentage,
       amount: commissionAmount,
       status: "pending",
     };
   }
-  
-  return Property.create(propertyBody);
+
+  // The slug is server-derived from the title, so ignore any client-supplied
+  // value rather than letting a request pick its own URL.
+  const { slug: _ignoredSlug, ...body } = propertyBody;
+
+  // buildUniqueSlug only rules out slugs that exist when it runs. Two
+  // simultaneous creates with the same title can therefore both settle on the
+  // same candidate, and the unique index rejects the loser — retry with a fresh
+  // suffix instead of surfacing a duplicate-key error.
+  let property;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const slug = await buildUniqueSlug(body.title, slugExists);
+      property = await Property.create({ ...body, slug });
+      break;
+    } catch (err) {
+      const isDuplicateSlug = err.code === 11000 && err.keyPattern && err.keyPattern.slug;
+      if (!isDuplicateSlug || attempt >= SLUG_RETRY_LIMIT) {
+        throw err;
+      }
+    }
+  }
+
+  // The listing is already saved, so this must not slow down or fail the
+  // create response - it can involve notifying an arbitrary number of users.
+  notifyFavouriteAreaUsers(property).catch((err) =>
+    logger.error("Favourite-area notification pass failed for property %s: %s", property._id, err.message || err)
+  );
+
+  // The listing is already saved, so a mail failure must not fail the create
+  // request - notify in the background and let the service log any problem.
+  // The admin reviews every new listing, so the creator's identity is fetched
+  // here rather than trusting a client-supplied name/email.
+  if (config.email.contactUsRecipient) {
+    sendEmailInBackground(async () => {
+      const creator = property.createdBy
+        ? await User.findById(property.createdBy).select("fullName email")
+        : null;
+      await sendNewPropertyEmail(config.email.contactUsRecipient, {
+        title: property.title,
+        district: property.district,
+        agentName: creator?.fullName,
+        agentEmail: creator?.email,
+        propertyUrl: property.slug
+          ? `${config.websiteUrl}/properties/${property.slug}`
+          : null,
+      });
+    });
+  }
+
+  return property;
 };
 
 const queryProperties = async (filter, options) => {
@@ -114,6 +328,7 @@ const queryProperties = async (filter, options) => {
   pipeline.push({
     $project: {
       title: 1,
+      slug: 1,
       description: 1,
       type: 1,
       price: 1,
@@ -126,6 +341,10 @@ const queryProperties = async (filter, options) => {
       catagory: 1,
       isBosted: 1,
       createdAt: 1,
+      // Exposed so the website's sitemap can advertise a truthful <lastmod>.
+      // Without it every entry would claim "just modified" and search engines
+      // learn to ignore the field.
+      updatedAt: 1,
       location: 1,
       images: 1,
       mapLink: 1,
@@ -139,6 +358,9 @@ const queryProperties = async (filter, options) => {
       videos: 1,
       features: 1,
       favorites: 1,
+      // Was missing here, so every card fell back to its `|| 0` default no
+      // matter how many times the detail page had actually incremented it.
+      views: 1,
       inquiries: 1,
       isFeatures: 1,
       isBosted: 1,
@@ -149,8 +371,10 @@ const queryProperties = async (filter, options) => {
       createdBy: {
         _id: "$createdBy._id",
         fullName: "$createdBy.fullName",
-        email: "$createdBy.email",
         profileImage: "$createdBy.profileImage",
+        // Lets a listing card label the lister correctly rather than assuming
+        // every property was posted by an agent.
+        role: "$createdBy.role",
         subscription: "$createdBy.subscription"
       },
     },
@@ -313,10 +537,38 @@ const queryPropertiesForAgent = async (filter, options, userId) => {
   };
 };
 
+// Fields exposed for the agent who listed a property. The detail page is
+// public, so contact details are deliberately excluded — an enquiry goes
+// through POST /contact/for-property rather than handing out an address for
+// scrapers to harvest. role is included so the page can label the person
+// correctly instead of assuming "Agent", and the name fields are all included
+// because fullName is nullable on older accounts.
+const AGENT_PUBLIC_FIELDS = "fullName firstName lastName profileImage role";
+
+/**
+ * Look up a property by either its slug or its Mongo id.
+ *
+ * Slug URLs are canonical, but ids stay resolvable so links shared before the
+ * slug migration keep working. A 24-character hex string is treated as an id;
+ * anything else can only be a slug. Slugs are matched first because that is the
+ * common case, and a real slug can never look like an ObjectId.
+ */
+const getPropertyByIdOrSlug = async (idOrSlug) => {
+  const or = [{ slug: idOrSlug }];
+  if (mongoose.Types.ObjectId.isValid(idOrSlug) && /^[a-f\d]{24}$/i.test(idOrSlug)) {
+    or.push({ _id: idOrSlug });
+  }
+
+  return Property.findOne({ $or: or, isDeleted: false }).populate(
+    "createdBy",
+    AGENT_PUBLIC_FIELDS
+  );
+};
+
 const getPropertyById = async (id) => {
   return Property.findOne({ _id: id, isDeleted: false }).populate(
     "createdBy",
-    "fullName profileImage"
+    AGENT_PUBLIC_FIELDS
   );
 };
 
@@ -326,7 +578,15 @@ const updatePropertyById = async (propertyId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
   }
 
-  Object.assign(property, updateBody);
+  normalizeAdministrativeArea(updateBody);
+  normalizeOptionalNumbers(updateBody);
+
+  // The slug is the property's public URL and is frozen after creation, so it is
+  // dropped here even when the title changes. Changing it would break every
+  // link already pointing at this property.
+  const { slug: _ignoredSlug, ...safeUpdate } = updateBody;
+
+  Object.assign(property, safeUpdate);
   await property.save();
   return property;
 };
@@ -382,6 +642,7 @@ module.exports = {
   createProperty,
   queryProperties,
   getPropertyById,
+  getPropertyByIdOrSlug,
   updatePropertyById,
   uploadPropertyImage,
   deletePropertyImage,

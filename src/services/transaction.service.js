@@ -1,6 +1,7 @@
 const httpStatus = require("http-status");
 const { Transaction, User } = require("../models");
 const ApiError = require("../utils/ApiError");
+const escapeRegex = require("../utils/escapeRegex");
 const mongoose = require("mongoose");
 
 const createTransaction = async (transactionBody) => {
@@ -54,31 +55,45 @@ const deleteTransactionById = async (transactionId) => {
   return transaction;
 };
 
-const queryTransactions = async (filter, options) => {
+/**
+ * List transactions.
+ *
+ * `scopeToUserId` restricts the result to a single owner and is applied after
+ * every other filter, so a caller-supplied `user`, `fullName` or `email` cannot
+ * widen it. That ordering matters: the name/email lookup below assigns to
+ * `query.user`, so scoping earlier would be silently overwritten and an agent
+ * could read another agent's payment screenshots by passing someone else's
+ * address. Admin listings pass no scope and still see everything.
+ */
+const queryTransactions = async (filter, options, scopeToUserId = null) => {
   const query = { isDeleted: false };
 
   // Transaction-level filters
   if (filter.type) query.type = filter.type;
-  if (filter.transactionId) query.type = filter.transactionId;
+  // Previously assigned to query.type, so filtering by the payment reference
+  // silently filtered by payment method instead and never matched.
+  if (filter.transactionId) query.transactionId = filter.transactionId;
   if (filter.status) query.status = filter.status;
   if (filter.user) query.user = filter.user;
 
-  /**
-   * 🔍 Filter by user fullName / email
-   */
+  // Filter by the buyer's name or email, which live on the User document.
   if (filter.fullName || filter.email) {
     const userQuery = {};
 
     if (filter.fullName) {
-      userQuery.fullName = { $regex: filter.fullName, $options: "i" };
+      userQuery.fullName = { $regex: escapeRegex(filter.fullName), $options: "i" };
     }
 
     if (filter.email) {
-      userQuery.email = { $regex: filter.email, $options: "i" };
+      userQuery.email = { $regex: escapeRegex(filter.email), $options: "i" };
     }
 
     const users = await User.find(userQuery).select("_id");
     query.user = { $in: users.map((u) => u._id) };
+  }
+
+  if (scopeToUserId) {
+    query.user = scopeToUserId;
   }
 
   options.populate = "user,subscriptionId";

@@ -3,7 +3,7 @@ const pick = require("../utils/pick");
 const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
-const { subscriptionService, stripeService, userService } = require("../services");
+const { subscriptionService } = require("../services");
 
 const subscriptionCreate = catchAsync(async (req, res) => {
   const { type } = req.body;
@@ -82,7 +82,7 @@ const subscriptionDeleteById = catchAsync(async (req, res) => {
 });
 
 const subscriptionList = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ["title", "description", "tyep"]);
+  const filter = pick(req.query, ["title", "description", "type"]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
   const result = await subscriptionService.querySubscriptions(filter, options);
   res.status(httpStatus.OK).json(
@@ -100,7 +100,7 @@ const subscriptionList = catchAsync(async (req, res) => {
 const takeSubscription = catchAsync(async (req, res) => {
 
   if (req.file) {
-    req.body.screenshot = "/uploads/other/" + req.file.filename;
+    req.body.screenshot = req.file.url;
   }
 
   const result = await subscriptionService.takeSubscriptions(
@@ -122,6 +122,7 @@ const takeSubscription = catchAsync(async (req, res) => {
 const approvedSubscriptions = catchAsync(async (req, res) => {
   const result = await subscriptionService.approvedSubscriptions(
     req.body.transactionId,
+    req.user.id,
   );
   
   res.status(httpStatus.CREATED).json(
@@ -138,6 +139,7 @@ const approvedSubscriptions = catchAsync(async (req, res) => {
 const rejectSubscriptions = catchAsync(async (req, res) => {
   const result = await subscriptionService.rejectSubscriptions(
     req.body.transactionId,
+    req.user.id,
   );
   
   res.status(httpStatus.CREATED).json(

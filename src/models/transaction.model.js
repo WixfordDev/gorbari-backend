@@ -26,6 +26,17 @@ const transactionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // The validity window is stored per transaction rather than read from
+    // user.subscription, which only ever holds the most recent purchase and so
+    // cannot describe the period an older transaction paid for.
+    subscriptionStartDate: {
+      type: Date,
+      default: null,
+    },
+    subscriptionExpirationDate: {
+      type: Date,
+      default: null,
+    },
     type: {
       type: String,
       enum: [

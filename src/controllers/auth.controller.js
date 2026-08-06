@@ -2,6 +2,7 @@ const httpStatus = require("http-status");
 const catchAsync = require("../utils/catchAsync");
 const ApiError = require("../utils/ApiError");
 const response = require("../config/response");
+const { generateOneTimeCode } = require("../utils/oneTimeCode");
 const {
   authService,
   userService,
@@ -16,7 +17,7 @@ const register = catchAsync(async (req, res) => {
   if (isUser) {
     if (isUser.isDeleted) {
       await userService.isUpdateUser(isUser.id, {
-        fullName: fullName || `${firstName} ${lastName}`,
+        fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
         firstName,
         lastName,
         email,
@@ -24,7 +25,7 @@ const register = catchAsync(async (req, res) => {
       });
     } else if (!isUser.isEmailVerified) {
       await userService.isUpdateUser(isUser.id, {
-        fullName: fullName || `${firstName} ${lastName}`,
+        fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
         firstName,
         lastName,
         email,
@@ -35,7 +36,7 @@ const register = catchAsync(async (req, res) => {
     }
   } else {
     await userService.createUser({
-      fullName: fullName || `${firstName} ${lastName}`,
+      fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
       firstName,
       lastName,
       email,
@@ -68,19 +69,15 @@ const login = catchAsync(async (req, res) => {
   }
   const user = await authService.loginUserWithEmailAndPassword(email, password);
 
-  setTimeout(async () => {
-    try {
-      user.oneTimeCode = null;
-      user.isResetPassword = false;
-      await user.save();
-      console.log("oneTimeCode reset to null after 3 minute");
-    } catch (error) {
-      ApiError;
-      console.error("Error updating oneTimeCode:", error);
-    }
-  }, 180000); // 3 minute in milliseconds
+  // The browser may already hold a push token from a previous session (the
+  // permission prompt, not login, is what asks for one) - save it here so a
+  // returning user doesn't need a separate round trip just to re-register it.
+  if (req.body.fcmToken && req.body.fcmToken !== user.fcmToken) {
+    user.fcmToken = req.body.fcmToken;
+    await user.save();
+  }
 
-  const tokens = await tokenService.generateAuthTokens(user);
+  const tokens = await tokenService.generateAuthTokens(user, undefined, req.body.rememberMe === true);
   res.status(httpStatus.OK).json(
     response({
       message: "Login Successful",
@@ -103,8 +100,15 @@ const logout = catchAsync(async (req, res) => {
 });
 
 const refreshTokens = catchAsync(async (req, res) => {
-  // const tokens = await authService.refreshAuth(req.body.refreshToken);
-  // res.send({ ...tokens });
+  const tokens = await authService.refreshAuth(req.body.refreshToken);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Tokens Refreshed",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: { tokens },
+    })
+  );
 });
 
 const forgotPassword = catchAsync(async (req, res) => {
@@ -122,15 +126,14 @@ const forgotPassword = catchAsync(async (req, res) => {
   //   );
   // }
   // Generate OTC (One-Time Code)
-  const oneTimeCode =
-    Math.floor(Math.random() * (999999 - 100000 + 1)) + 100000;
+  const { oneTimeCode, oneTimeCodeExpires } = generateOneTimeCode();
 
   // Store the OTC and its expiration time in the database
   user.oneTimeCode = oneTimeCode;
+  user.oneTimeCodeExpires = oneTimeCodeExpires;
   user.isResetPassword = true;
   await user.save();
 
-  //console.log("oneTimeCode", user);
   await emailService.sendResetPasswordEmail(req.body.email, oneTimeCode);
   res.status(httpStatus.OK).json(
     response({
@@ -167,9 +170,15 @@ const changePassword = catchAsync(async (req, res) => {
 });
 
 const sendVerificationEmail = catchAsync(async (req, res) => {
-  // const verifyEmailToken = await tokenService.generateVerifyEmailToken(req.user);
-  // await emailService.sendVerificationEmail(req.user.email, verifyEmailToken);
-  // res.status(httpStatus.OK).send();
+  await userService.resendEmailVerification(req.body.email);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Verification code sent. Please check your email",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: {},
+    })
+  );
 });
 
 const verifyEmail = catchAsync(async (req, res) => {

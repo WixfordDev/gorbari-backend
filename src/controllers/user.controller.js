@@ -4,7 +4,7 @@ const ApiError = require("../utils/ApiError");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
 const { userService } = require("../services");
-const unlinkImages = require("../common/unlinkImage");
+const { Property } = require("../models");
 
 const createUser = catchAsync(async (req, res) => {
   const user = await userService.createUser(req.body);
@@ -19,15 +19,16 @@ const createUser = catchAsync(async (req, res) => {
 });
 
 const getUsers = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ["fullName", "role", "gender"]);
+  const filter = pick(req.query, ["fullName", "email", "role", "gender"]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
   const result = await userService.queryUsers(filter, options);
+  const stats = await userService.getUsersStats(filter);
   res.status(httpStatus.OK).json(
     response({
       message: "All Users",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: result,
+      data: { ...result, stats },
     })
   );
 });
@@ -40,10 +41,22 @@ const getPublicAgent = catchAsync(async (req, res) => {
 
   const result = await userService.queryUsers(filter, options);
 
+  // Real count of each agent's own (non-deleted) listings, not a placeholder -
+  // grouped in one aggregation rather than a countDocuments() per agent.
+  const agentIds = result.results.map((agent) => agent._id);
+  const listingCounts = await Property.aggregate([
+    { $match: { createdBy: { $in: agentIds }, isDeleted: false } },
+    { $group: { _id: "$createdBy", count: { $sum: 1 } } },
+  ]);
+  const listingCountByAgent = Object.fromEntries(
+    listingCounts.map(({ _id, count }) => [_id.toString(), count])
+  );
+
   const agents = result.results.map((agent) => ({
     id: agent._id,
     fullName: agent.fullName,
-    image: agent.profileImage || null,
+    profileImage: agent.profileImage || null,
+    listings: listingCountByAgent[agent._id.toString()] || 0,
   }));
 
   res.status(httpStatus.OK).json(
@@ -112,9 +125,8 @@ const updateUser = catchAsync(async (req, res) => {
     req.body.interest = parsedInterest;
   }
   const image = {};
-  console.log(req.file);
   if (req.file) {
-    image.url = "/uploads/users/" + req.file.filename;
+    image.url = req.file.url;
     image.path = req.file.path;
   }
   if (req.file) {
@@ -135,7 +147,7 @@ const updateUser = catchAsync(async (req, res) => {
 
 const updateProfile = catchAsync(async (req, res) => {
   if (req.file) {
-    req.body.profileImage = `/uploads/users/${req.file.filename}`;
+    req.body.profileImage = req.file.url;
   }
 
   // Set fullName if firstName or lastName is provided
@@ -153,6 +165,19 @@ const updateProfile = catchAsync(async (req, res) => {
       status: "OK",
       statusCode: httpStatus.OK,
       data: user,
+    })
+  );
+});
+
+const updateFcmToken = catchAsync(async (req, res) => {
+  await userService.updateUserById(req.user.id, { fcmToken: req.body.fcmToken });
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Device registered for notifications",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: {},
     })
   );
 });
@@ -176,6 +201,7 @@ module.exports = {
   getProfile,
   updateUser,
   updateProfile,
+  updateFcmToken,
   deleteUser,
   getPublicAgent
 };

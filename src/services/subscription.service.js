@@ -1,9 +1,14 @@
 const httpStatus = require("http-status");
-const { Subscription, Payment } = require("../models");
+const cron = require("node-cron");
+const { Subscription, User } = require("../models");
 const ApiError = require("../utils/ApiError");
 const mongoose = require("mongoose");
 const { getUserById } = require("./user.service");
 const transactionService = require("./transaction.service");
+const notificationService = require("./notification.service");
+const { sendSubscriptionDecisionEmail, sendNewSubscriptionPurchaseEmail, sendEmailInBackground } = require("./email.service");
+const config = require("../config/config");
+const logger = require("../config/logger");
 
 const createSubscription = async (subscriptionBody) => {
   const subscription = await Subscription.create(subscriptionBody);
@@ -85,15 +90,16 @@ const takeSubscriptions = async (userId, subData) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "subscription not found");
   }
 
-const expirationDate = new Date();
-expirationDate.setDate(expirationDate.getDate() + (subscription.days || 0));
-
+  const startDate = new Date();
+  const expirationDate = new Date();
+  expirationDate.setDate(expirationDate.getDate() + (subscription.days || 0));
 
   const subDatas = {
     user: user._id,
     subscriptionId: subData.subscriptionId,
     status: "pending",
     subscriptionLimitation: subscription.days || 0,
+    subscriptionStartDate: startDate,
     subscriptionExpirationDate: expirationDate,
     type: subData.type,
     amount: subscription.amount,
@@ -113,10 +119,25 @@ expirationDate.setDate(expirationDate.getDate() + (subscription.days || 0));
 
   await user.save();
 
+  // The transaction is already created, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  // The admin reviews this purchase from the transactions page.
+  if (config.email.contactUsRecipient) {
+    sendEmailInBackground(() =>
+      sendNewSubscriptionPurchaseEmail(config.email.contactUsRecipient, {
+        agentName: user.fullName,
+        agentEmail: user.email,
+        planTitle: subscription.title,
+        amount: transaction.amount,
+        type: transaction.type,
+      })
+    );
+  }
+
   return transaction;
 };
 
-const approvedSubscriptions = async (transactionId) => {
+const approvedSubscriptions = async (transactionId, approvedBy) => {
   const transaction = await transactionService.getTransactionById(
     transactionId
   );
@@ -140,10 +161,34 @@ const approvedSubscriptions = async (transactionId) => {
   };
   await user.save();
 
+  // The transaction is already approved, so a notification failure must not
+  // undo that - it would only mean the bell icon misses this one entry.
+  try {
+    await notificationService.createNotification({
+      userId: user._id,
+      sendBy: approvedBy,
+      title: "Subscription approved",
+      content: "Your subscription payment has been approved and is now active.",
+      type: "subscription",
+      priority: "high",
+    });
+  } catch (err) {
+    logger.error("Failed to create subscription-approved notification: %s", err.message || err);
+  }
+
+  // The transaction is already approved, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  const planTitle = transaction.subscriptionId?.title;
+  if (user.email) {
+    sendEmailInBackground(() =>
+      sendSubscriptionDecisionEmail(user.email, { status: "approved", planTitle })
+    );
+  }
+
   return transaction;
 };
 
-const rejectSubscriptions = async (transactionId) => {
+const rejectSubscriptions = async (transactionId, rejectedBy) => {
   const transaction = await transactionService.getTransactionById(
     transactionId
   );
@@ -168,40 +213,85 @@ const rejectSubscriptions = async (transactionId) => {
 
   await user.save();
 
-  return transaction;
-};
-
-const updatePayment = async (paymentData) => {
-  const payment = await Payment.findOne({
-    checkoutSessionId: paymentData.checkoutSessionId,
-  });
-
-  if (!payment) {
-    throw new ApiError(httpStatus.NOT_FOUND, "The payment is not found");
+  try {
+    await notificationService.createNotification({
+      userId: user._id,
+      sendBy: rejectedBy,
+      title: "Subscription rejected",
+      content: "Your subscription payment was rejected. Please contact support or try again.",
+      type: "subscription",
+      priority: "high",
+    });
+  } catch (err) {
+    logger.error("Failed to create subscription-rejected notification: %s", err.message || err);
   }
 
-  payment.status = paymentData.status || payment.status;
-  payment.stripeSubId = paymentData.stripeSubId || "";
-  payment.mode = paymentData.mode || "";
-  payment.stripeInfo = paymentData.stripeInfo || {};
-
-  await payment.save();
-
-  return payment;
-};
-
-const findPaymentByStripSubId = async (stripeSubId) => {
-  console.log("Finding payment with Stripe Subscription ID:", stripeSubId);
-  const payment = await Payment.findOne({ stripeSubId: stripeSubId });
-
-  if (!payment) {
-    throw new ApiError(
-      httpStatus.NOT_FOUND,
-      "The payment is not found findPaymentByStripSubId"
+  // The transaction is already rejected, so a mail failure must not fail the
+  // request - notify in the background and let the service log any problem.
+  const planTitle = transaction.subscriptionId?.title;
+  if (user.email) {
+    sendEmailInBackground(() =>
+      sendSubscriptionDecisionEmail(user.email, { status: "rejected", planTitle })
     );
   }
 
-  return payment;
+  return transaction;
+};
+
+/**
+ * Notify every agent whose plan expires exactly 3 days from now.
+ *
+ * Matches a single calendar day rather than "expires within 3 days" so this
+ * fires once per agent, not once a day for the last 3 days before expiry -
+ * this job runs daily, so a wider window would repeat the same warning.
+ */
+const checkExpiringSubscriptions = async () => {
+  const targetStart = new Date();
+  targetStart.setDate(targetStart.getDate() + 3);
+  targetStart.setHours(0, 0, 0, 0);
+
+  const targetEnd = new Date(targetStart);
+  targetEnd.setHours(23, 59, 59, 999);
+
+  const users = await User.find({
+    "subscription.isSubscriptionTaken": true,
+    "subscription.subscriptionExpirationDate": { $gte: targetStart, $lte: targetEnd },
+  }).select("_id");
+
+  await Promise.all(
+    users.map((user) =>
+      notificationService
+        .createNotification({
+          userId: user._id,
+          title: "Your plan is expiring soon",
+          content: "Your subscription plan expires in 3 days. Renew now to keep your benefits.",
+          type: "subscription",
+          priority: "high",
+        })
+        .catch((err) =>
+          logger.error(
+            "Failed to create expiry-warning notification for %s: %s",
+            user._id,
+            err.message || err
+          )
+        )
+    )
+  );
+
+  return users.length;
+};
+
+// Started once at server boot (see src/index.js). Runs daily at 9am - late
+// enough that an agent checking their phone in the morning already has it.
+const scheduleSubscriptionExpiryWarnings = () => {
+  cron.schedule("0 9 * * *", async () => {
+    try {
+      const count = await checkExpiringSubscriptions();
+      logger.info("[CRON] Subscription expiry warnings sent: %d", count);
+    } catch (err) {
+      logger.error("[CRON] Subscription expiry warning job failed: %s", err.message || err);
+    }
+  });
 };
 
 module.exports = {
@@ -211,9 +301,10 @@ module.exports = {
   deleteSubscriptionById,
   querySubscriptions,
 
+  checkExpiringSubscriptions,
+  scheduleSubscriptionExpiryWarnings,
+
   takeSubscriptions,
-  updatePayment,
-  findPaymentByStripSubId,
   approvedSubscriptions,
   rejectSubscriptions,
 };

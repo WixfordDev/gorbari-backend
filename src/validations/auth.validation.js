@@ -18,6 +18,7 @@ const login = {
     email: Joi.string().required(),
     password: Joi.string().required(),
     fcmToken: Joi.string(),
+    rememberMe: Joi.boolean(),
   }),
 };
 
@@ -60,6 +61,12 @@ const verifyEmail = {
   }),
 };
 
+const sendVerificationEmail = {
+  body: Joi.object().keys({
+    email: Joi.string().email().required(),
+  }),
+};
+
 const deleteMe = {
   body: Joi.object().keys({
     password: Joi.string().required().custom(password),
@@ -85,6 +92,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  sendVerificationEmail,
   deleteMe,
   changePassword
 };

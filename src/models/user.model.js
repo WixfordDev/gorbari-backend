@@ -45,10 +45,13 @@ const userSchema = mongoose.Schema(
       trim: true,
       minlength: 8,
       validate(value) {
-        if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
-          throw new Error(
-            "Password must contain at least one letter and one number"
-          );
+        const missing = [];
+        if (!value.match(/[A-Z]/)) missing.push("one uppercase letter");
+        if (!value.match(/[a-z]/)) missing.push("one lowercase letter");
+        if (!value.match(/\d/)) missing.push("one number");
+        if (!value.match(/[!@#$%^&*]/)) missing.push("one special character (!@#$%^&*)");
+        if (missing.length) {
+          throw new Error(`Password must contain at least ${missing.join(", ")}`);
         }
       },
       private: true,
@@ -80,8 +83,21 @@ const userSchema = mongoose.Schema(
       type: String,
       default: null
     },
+    // Firebase Cloud Messaging registration token for this device. Overwritten
+    // on every login/refresh rather than keyed per-device, so a user signed in
+    // on a second browser simply stops receiving push on the first - accepted
+    // for now since there is no multi-device token list yet.
+    fcmToken: {
+      type: String,
+      default: null,
+    },
     oneTimeCode: {
       type: String,
+      required: false,
+      default: null
+    },
+    oneTimeCodeExpires: {
+      type: Date,
       required: false,
       default: null
     },

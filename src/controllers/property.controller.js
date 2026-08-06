@@ -1,12 +1,12 @@
 const httpStatus = require("http-status");
 const pick = require("../utils/pick");
 const response = require("../config/response");
-const { propertyService, subscriptionService } = require("../services");
+const { propertyService, subscriptionService, cloudinaryService } = require("../services");
 const catchAsync = require("../utils/catchAsync");
-const unlinkImages = require("../common/unlinkImage");
 const ApiError = require("../utils/ApiError");
 const { default: mongoose } = require("mongoose");
 const cron = require("node-cron");
+const { Property } = require("../models");
 
 const createProperty = catchAsync(async (req, res) => {
   req.body.createdBy = req.user.id;
@@ -46,13 +46,11 @@ const createProperty = catchAsync(async (req, res) => {
   }
 
   if (req.files?.images) {
-    req.body.images = req.files.images.map(
-      (file) => `/uploads/propertys/${file.filename}`
-    );
+    req.body.images = req.files.images.map((file) => file.url);
   } else if (req.body.images) {
     req.body.images = Array.isArray(req.body.images)
-      ? req.body.images.map((img) => `/uploads/propertys/${img}`)
-      : [`/uploads/propertys/${req.body.images}`];
+      ? req.body.images
+      : [req.body.images];
   }
 
   if (typeof req.body.other === "string") {
@@ -69,7 +67,6 @@ const createProperty = catchAsync(async (req, res) => {
   }
 
   const property = await propertyService.createProperty(req.body);
-
   res.status(httpStatus.CREATED).json(
     response({
       message: "Property created successfully",
@@ -274,7 +271,13 @@ const getPropertiesAdvanced = catchAsync(async (req, res) => {
 });
 
 const getPropertyById = catchAsync(async (req, res) => {
-  const property = await propertyService.getPropertyById(req.params.propertyId);
+  // Accepts a slug or an id: slugs are the canonical public URL, ids stay
+  // resolvable for links shared before the slug migration.
+  const property = await propertyService.getPropertyByIdOrSlug(req.params.propertyId);
+
+  if (!property) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
+  }
 
   property.views += 1;
 
@@ -328,13 +331,11 @@ const updateProperty = catchAsync(async (req, res) => {
 
   // Images handling
   if (req.files?.images) {
-    req.body.images = req.files.images.map(
-      (file) => `/uploads/propertys/${file.filename}`
-    );
+    req.body.images = req.files.images.map((file) => file.url);
   } else if (req.body.images) {
     req.body.images = Array.isArray(req.body.images)
-      ? req.body.images.map((img) => `/uploads/propertys/${img}`)
-      : [`/uploads/propertys/${req.body.images}`];
+      ? req.body.images
+      : [req.body.images];
   }
 
   // Parse JSON fields
@@ -413,7 +414,7 @@ const uploadPropertyImage = catchAsync(async (req, res) => {
     }
   }
 
-  const imagePath = `/uploads/propertys/${req.file.filename}`;
+  const imagePath = req.file.url;
 
   const updatedProperty = await propertyService.uploadPropertyImage(
     req.params.propertyId,
@@ -433,6 +434,8 @@ const uploadPropertyImage = catchAsync(async (req, res) => {
 const deletePropertyImage = catchAsync(async (req, res) => {
   const { imagePath } = req.body;
 
+  await cloudinaryService.destroyByUrl(imagePath);
+
   const property = await propertyService.deletePropertyImage(
     req.params.propertyId,
     imagePath
@@ -449,6 +452,14 @@ const deletePropertyImage = catchAsync(async (req, res) => {
 });
 
 const deleteProperty = catchAsync(async (req, res) => {
+  const property = await propertyService.getPropertyById(req.params.propertyId);
+
+  if (property?.images?.length) {
+    for (const image of property.images) {
+      await cloudinaryService.destroyByUrl(image);
+    }
+  }
+
   await propertyService.deletePropertyById(req.params.propertyId);
   res.status(httpStatus.OK).json(
     response({

@@ -1,8 +1,9 @@
 const httpStatus = require("http-status");
-const { Favorite, Property, Transaction, User, AboutUs, TermsAndCondition, PrivacyPolicy } = require("../models");
+const { Favorite, Property, Transaction, User, AboutUs, TermsAndCondition, PrivacyPolicy, HomepageSettings } = require("../models");
 const ApiError = require("../utils/ApiError");
 const propertyService = require("./property.service");
 const he = require("he");
+const { sanitizeInlineHtml, sanitizeRichHtml } = require("../utils/sanitizeHtml");
 
 const createFavorite = async (favoriteBody) => {
   if (favoriteBody.property) {
@@ -54,7 +55,7 @@ const queryFavorites = async (filter, options, userId) => {
     .skip(skip)
     .limit(limitNum)
     .populate("user", "fullName email profileImage")
-    .populate("property", "title type price location images status");
+    .populate("property", "title slug type price address city images status bedrooms bathrooms areaSqFt");
 
   const totalResults = await Favorite.countDocuments({
     ...filter,
@@ -271,6 +272,70 @@ const queryAboutUs = async () => {
   return newAboutUs;
 };
 
+// Admin-curated properties for the homepage's hero, "Featured Properties"
+// and "Dream Home" sections, plus the free-form content that goes with the
+// latter. Same upsert/singleton pattern as AboutUs/Privacy/Terms.
+// The Featured Properties cards need more than the simple sliders do, hence
+// the extra fields (bedrooms/bathrooms/areaSqFt/views/isBosted/city).
+const PROPERTY_SHOWCASE_FIELDS =
+  "title slug images price status type bedrooms bathrooms areaSqFt views isBosted city address";
+
+const getHomepageSettings = async () => {
+  const settings = await HomepageSettings.findOne()
+    .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+
+  if (settings) return settings;
+
+  // Never configured yet - default to the newest listings rather than an
+  // empty homepage, until the admin picks their own. Property.find() simply
+  // returns [] with no properties yet, so this never errors on an empty site.
+  const [heroDefaults, dreamHomeDefaults, featuredDefaults] = await Promise.all([
+    Property.find({ isDeleted: false }).sort({ createdAt: -1 }).limit(3).select(PROPERTY_SHOWCASE_FIELDS),
+    Property.find({ isDeleted: false }).sort({ createdAt: -1 }).limit(2).select(PROPERTY_SHOWCASE_FIELDS),
+    Property.find({ isDeleted: false }).sort({ createdAt: -1 }).limit(6).select(PROPERTY_SHOWCASE_FIELDS),
+  ]);
+
+  return {
+    heroProperties: heroDefaults,
+    dreamHomeProperties: dreamHomeDefaults,
+    featuredProperties: featuredDefaults,
+    dreamHomeHeading: HomepageSettings.schema.path("dreamHomeHeading").defaultValue,
+    dreamHomeSubheading: HomepageSettings.schema.path("dreamHomeSubheading").defaultValue,
+    dreamHomeContent: HomepageSettings.schema.path("dreamHomeContent").defaultValue,
+  };
+};
+
+const updateHomepageSettings = async (body) => {
+  // Decode before sanitising, not after: the editor posts entity-encoded
+  // markup, so sanitising first would inspect inert text and then decode it
+  // back into live tags that were never checked.
+  //
+  // Heading and subheading are limited to inline formatting so the admin can
+  // colour or emphasise a word without altering the fixed responsive type
+  // scale the section layout depends on. The body panel keeps block tags.
+  if (body.dreamHomeHeading) {
+    body.dreamHomeHeading = sanitizeInlineHtml(he.decode(body.dreamHomeHeading));
+  }
+  if (body.dreamHomeSubheading) {
+    body.dreamHomeSubheading = sanitizeInlineHtml(he.decode(body.dreamHomeSubheading));
+  }
+  if (body.dreamHomeContent) {
+    body.dreamHomeContent = sanitizeRichHtml(he.decode(body.dreamHomeContent));
+  }
+
+  const existing = await HomepageSettings.findOne();
+  const saved = existing
+    ? await Object.assign(existing, body).save()
+    : await HomepageSettings.create(body);
+
+  return HomepageSettings.findById(saved._id)
+    .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+};
+
 const getPublicStatus = async () => {
   const totalProperty = await Property.countDocuments({
     isDeleted: false,
@@ -284,10 +349,21 @@ const getPublicStatus = async () => {
   const totalClient = Math.floor((totalUsers * 60) / 100);
   const happyClient = Math.floor((totalUsers * 10) / 100);
 
+  // `district` is left null on every existing listing (verified against the
+  // live database) even though the model comment calls it the structured
+  // field - `city` is what property creation actually populates, so it's
+  // the reliable one to count distinct values from.
+  const cities = await Property.distinct("city", {
+    isDeleted: false,
+    city: { $nin: [null, ""] },
+  });
+  const totalCities = cities.length;
+
   return {
     totalProperty,
     totalClient,
     happyClient,
+    totalCities,
   };
 };
 
@@ -311,4 +387,7 @@ module.exports = {
   queryTerms,
   createAboutUs,
   queryAboutUs,
+
+  getHomepageSettings,
+  updateHomepageSettings,
 };

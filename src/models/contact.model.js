@@ -59,9 +59,19 @@ const contactSchema = mongoose.Schema(
     },
     message: {
       type: String,
-      required: function () {
-        return this.type === "general"; 
-      },
+      trim: true,
+      // Required for every enquiry: a lead with no message is not actionable,
+      // and previously a property enquiry could be saved completely empty.
+      required: true,
+    },
+    // What the sender is asking for. Kept separate from `type` (which
+    // distinguishes a site-wide contact form from a property enquiry) so an
+    // agent can tell a purchase request apart from a general question, and so a
+    // future payment flow has an existing record to attach to.
+    intent: {
+      type: String,
+      enum: ["general", "buy", "rent", "lease", "auction", "visit"],
+      default: "general",
     },
     type: {
       type: String,
@@ -69,6 +79,38 @@ const contactSchema = mongoose.Schema(
       required: true,
       default: "general",
     },
+    // Follow-up state for an agent's workflow. Defaults to new so existing
+    // records read as untouched, "seen" when the agent opens the enquiry, and
+    // "replied" when they confirm they have responded. Doubles as "whose turn
+    // it is" once replies start flowing both ways: a reply from the property
+    // owner sets it back to "replied", a follow-up from the sender sets it
+    // back to "new" so the owner sees it needs attention again.
+    status: {
+      type: String,
+      enum: ["new", "seen", "replied"],
+      default: "new",
+    },
+    // The message thread for this enquiry, oldest first. The original
+    // `message` field is the sender's opening message and is left alone;
+    // everything after that - either side - lives here.
+    replies: [
+      {
+        sender: {
+          type: mongoose.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        message: {
+          type: String,
+          trim: true,
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

@@ -1,30 +1,13 @@
 const multer = require("multer");
-const path = require("path");
 
-module.exports = function (UPLOADS_FOLDER) {
-  const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, UPLOADS_FOLDER); // Use the provided destination folder
-    },
-    filename: (req, file, cb) => {
-      const fileExt = path.extname(file.originalname);
-      const filename =
-        file.originalname
-          .replace(fileExt, "")
-          .toLocaleLowerCase()
-          .split(" ")
-          .join("-") +
-        "-" +
-        Date.now();
-
-      cb(null, filename + fileExt);
-    },
-  });
+// Files are kept in memory (buffers) and uploaded to Cloudinary afterward.
+module.exports = function () {
+  const storage = multer.memoryStorage();
 
   const upload = multer({
     storage: storage,
     limits: {
-      fileSize: 200000000000000000000000000, // 20MB
+      fileSize: 10 * 1024 * 1024, // 10MB
     },
     fileFilter: (req, file, cb) => {
       if (
@@ -35,12 +18,11 @@ module.exports = function (UPLOADS_FOLDER) {
         file.mimetype == "image/heif"
       ) {
         cb(null, true);
-
       } else {
         cb(new Error("Only jpg, png, jpeg format allowed!"));
       }
     },
   });
 
-  return upload; // Return the configured multer upload middleware
+  return upload;
 };

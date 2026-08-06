@@ -38,4 +38,9 @@ router
 
 router.route("/public/status").get(infoController.getPublicStatus);
 
+router
+  .route("/homepage-settings")
+  .post(auth("admin"), infoController.updateHomepageSettings)
+  .get(infoController.getHomepageSettings);
+
 module.exports = router;

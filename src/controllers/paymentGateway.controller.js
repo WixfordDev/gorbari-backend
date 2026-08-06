@@ -9,7 +9,7 @@ const createGateway = catchAsync(async (req, res) => {
   req.body.createdBy = req.user.id;
 
   if (req.file) {
-    req.body.logo = "/uploads/other/" + req.file.filename;
+    req.body.logo = req.file.url;
   }
 
   const gateway = await paymentGatewayService.createGateway(req.body);
@@ -38,7 +38,7 @@ const getGatewayById = catchAsync(async (req, res) => {
 
 const updateGatewayById = catchAsync(async (req, res) => {
   if (req.file) {
-    req.body.logo = "/uploads/other/" + req.file.filename;
+    req.body.logo = req.file.url;
   }
 
   const gateway = await paymentGatewayService.updateGatewayById(

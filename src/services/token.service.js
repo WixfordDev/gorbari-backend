@@ -12,12 +12,11 @@ const generateToken = (activityId, userId, expires, type, secret = config.jwt.se
   const payload = {
     sub: userId,
     iat: moment().unix(),
-    exp: moment().add(expires, 'seconds').unix(), // Assuming 'expires' is a duration in seconds
+    exp: expires.unix(),
     activity: activityId,
     type,
   };
 
-  // console.log("payload", payload);
   return jwt.sign(payload, secret);
 };
 
@@ -45,12 +44,17 @@ const verifyToken = async (token, type) => {
 };
 
 
-const generateAuthTokens = async (user, activityId) => {
-  const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
+const generateAuthTokens = async (user, activityId, rememberMe = false) => {
+  // "Remember me" issues a much longer-lived access token (days), while a plain
+  // login keeps the short one (minutes) so the session dies quickly if it is
+  // stolen. The refresh token is unaffected in both cases.
+  const accessTokenExpires = rememberMe
+    ? moment().add(config.jwt.rememberAccessExpirationDays, "days")
+    : moment().add(config.jwt.accessExpirationMinutes, "minutes");
   const accessToken = generateToken(activityId, user.id, accessTokenExpires, tokenTypes.ACCESS);
 
-  const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, 'days');
-  const refreshToken = generateToken(user.id, refreshTokenExpires, tokenTypes.REFRESH);
+  const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, "days");
+  const refreshToken = generateToken(activityId, user.id, refreshTokenExpires, tokenTypes.REFRESH);
   await saveToken(refreshToken, user.id, refreshTokenExpires, tokenTypes.REFRESH);
 
   return {
@@ -72,14 +76,14 @@ const generateResetPasswordToken = async (email) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'No users found with this email');
   }
   const expires = moment().add(config.jwt.resetPasswordExpirationMinutes, 'minutes');
-  const resetPasswordToken = generateToken(user.id, expires, tokenTypes.RESET_PASSWORD);
+  const resetPasswordToken = generateToken(undefined, user.id, expires, tokenTypes.RESET_PASSWORD);
   await saveToken(resetPasswordToken, user.id, expires, tokenTypes.RESET_PASSWORD);
   return resetPasswordToken;
 };
 
 const generateVerifyEmailToken = async (user) => {
   const expires = moment().add(config.jwt.verifyEmailExpirationMinutes, 'minutes');
-  const verifyEmailToken = generateToken(user.id, expires, tokenTypes.VERIFY_EMAIL);
+  const verifyEmailToken = generateToken(undefined, user.id, expires, tokenTypes.VERIFY_EMAIL);
   await saveToken(verifyEmailToken, user.id, expires, tokenTypes.VERIFY_EMAIL);
   return verifyEmailToken;
 };

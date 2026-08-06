@@ -18,6 +18,7 @@ const app = express();
 
 if (config.env !== "test") {
   app.use(morgan.successHandler);
+  app.use(morgan.clientErrorHandler);
   app.use(morgan.errorHandler);
 }
 
@@ -45,7 +46,6 @@ const corsOptions = {
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
 };
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -56,7 +56,7 @@ passport.use("jwt", jwtStrategy);
 
 // limit repeated failed requests to auth endpoints
 if (config.env === "production") {
-  app.use("/v1/auth", authLimiter);
+  app.use("/api/v1/auth", authLimiter);
 }
 
 // v1 api routes

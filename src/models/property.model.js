@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { toJSON, paginate } = require("./plugins");
+const { DIVISION_NAMES } = require("../config/bangladeshGeo");
 
 const propertySchema = mongoose.Schema(
   {
@@ -11,6 +12,23 @@ const propertySchema = mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
+    },
+    // URL identifier derived from the title at creation time. Deliberately not
+    // regenerated when the title changes: the slug is the public URL, so a
+    // stable value keeps inbound links and accumulated search ranking intact.
+    // Sparse so the unique index tolerates documents that have no slug yet.
+    // The field must be omitted rather than null for that to work: a sparse
+    // unique index still enforces uniqueness over an explicit null, so a
+    // default of null would reject every document after the first that was
+    // created without a slug. Creators that have no slug simply leave the
+    // field unset.
+    slug: {
+      type: String,
+      required: false,
+      unique: true,
+      sparse: true,
+      index: true,
       trim: true,
     },
     description: {
@@ -33,6 +51,28 @@ const propertySchema = mongoose.Schema(
       required: true,
       trim: true,
     },
+    // Bangladesh's administrative geography, replacing the free-text city/state
+    // pair for local listings. Constrained to the known divisions so a filter
+    // by division cannot be defeated by a typo or an alternate spelling.
+    //
+    // Not required: properties predating this field have neither value, and
+    // making them required would fail every update to an older listing.
+    division: {
+      type: String,
+      trim: true,
+      enum: [...DIVISION_NAMES, null],
+      default: null,
+      index: true,
+    },
+    district: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    // Kept alongside division/district rather than dropped: existing documents
+    // hold values here, the public listing pages still read them, and a
+    // non-Bangladeshi address has nowhere else to go.
     city: {
       type: String,
       trim: true,
@@ -71,13 +111,15 @@ const propertySchema = mongoose.Schema(
     },
     price: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
+      default: null,
     },
     areaSqFt: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
+      default: null,
     },
     lotSize: {
       type: Number,

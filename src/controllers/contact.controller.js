@@ -1,34 +1,39 @@
 const httpStatus = require("http-status");
 const catchAsync = require("../utils/catchAsync");
 const response = require("../config/response");
-const { contactService, subscriptionService } = require("../services");
+const { contactService } = require("../services");
 const pick = require("../utils/pick");
 const ApiError = require("../utils/ApiError");
+const {
+  LEAD_ACCESS,
+  LEAD_ACCESS_MESSAGES,
+  resolveLeadAccess,
+  redactLead,
+} = require("../utils/leadAccess");
 
 const createContact = catchAsync(async (req, res) => {
   if (!req.body.type) {
     throw new ApiError(httpStatus.BAD_REQUEST, "type is required");
   }
 
-  if (req.body.fullName) {
-    req.body.fullName = req.body.fullName;
-  } else if (req.body.firstName && req.body.lastName) {
-    req.body.firstName = req.body.firstName;
-    req.body.lastName = req.body.lastName || "";
-    req.body.fullName = `${req.body.firstName} ${req.body.lastName}`;
+  if (!req.body.fullName && req.body.firstName) {
+    req.body.fullName = `${req.body.firstName} ${req.body.lastName || ""}`.trim();
   }
 
   if (req.user) {
     req.body.user = req.user.id;
-    req.body.fullName = req.user.fullName;
+    req.body.fullName = req.user.fullName || req.body.fullName;
+    // Carried over from the account so the notification email can identify and
+    // reply to the sender. Previously only the name was copied, which is why
+    // those emails rendered "Email Address: undefined".
+    req.body.email = req.user.email;
+    req.body.phoneNumber = req.body.phoneNumber || req.user.phoneNumber;
   }
-
-  console.log(req.body);
 
   const contact = await contactService.createContacts(req.body);
   res.status(httpStatus.CREATED).json(
     response({
-      message: `${contact.fullName} successfully sent a message`,
+      message: "Your message has been sent successfully",
       status: "OK",
       statusCode: httpStatus.CREATED,
       data: {},
@@ -47,12 +52,28 @@ const getContact = catchAsync(async (req, res) => {
       })
     );
   }
+
+  // This route is open to agents as well as admins, so without an ownership
+  // check any agent could read any other agent's leads by guessing an id.
+  const isOwner = String(contact.propertyWoner?.id || contact.propertyWoner) === String(req.user.id);
+  if (req.user.role !== "admin" && !isOwner) {
+    throw new ApiError(httpStatus.FORBIDDEN, "This enquiry is not yours");
+  }
+
+  // Redacting the list but not the single-lead route would leave the paywall
+  // trivially bypassable: fetch the ids from the locked list, then request each
+  // one individually for the full sender details.
+  const access = await resolveLeadAccess(req.user);
+  const isLocked = access !== LEAD_ACCESS.GRANTED;
+
   res.status(httpStatus.OK).json(
     response({
       message: "Contact retrieved",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: contact,
+      data: isLocked
+        ? { ...redactLead(contact), leadAccess: access, lockReason: LEAD_ACCESS_MESSAGES[access] }
+        : contact,
     })
   );
 });
@@ -64,8 +85,15 @@ const getContacts = catchAsync(async (req, res) => {
     "phoneNumber",
     "address",
     "type",
+    // Lets the admin lead list separate purchase requests from general
+    // questions, and a single term search across name and email.
+    "intent",
+    "search",
   ]);
   const options = pick(req.query, ["sortBy", "limit", "page"]);
+  // Newest first: a lead list is only useful if the most recent enquiry is at
+  // the top, and paginate defaults to insertion order without this.
+  options.sortBy = options.sortBy || "createdAt:desc";
   const contacts = await contactService.getAllcontact(filter, options);
   res.status(httpStatus.OK).json(
     response({
@@ -84,39 +112,65 @@ const getSelfContacts = catchAsync(async (req, res) => {
     "phoneNumber",
     "address",
     "type",
+    "intent",
+    "status",
+    "search",
+    "property",
   ]);
 
   const options = pick(req.query, ["sortBy", "limit", "page"]);
+  options.sortBy = options.sortBy || "createdAt:desc";
   const user = req.user;
 
-  if (user.role !== "admin") {
-    if (!user.subscription || !user.subscription.isSubscriptionTaken) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "You don't have an active subscription. Please upgrade your plan."
-      );
-    }
+  const access = await resolveLeadAccess(user);
+  const isLocked = access !== LEAD_ACCESS.GRANTED;
 
-    if (new Date(user.subscription.subscriptionExpirationDate) < new Date()) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Your subscription has expired. Please renew your plan."
-      );
-    }
-
-    const subscription = await subscriptionService.getSubscriptionById(
-      user.subscription.subscriptionId
+  // Previously this threw 403 when the subscription check failed, so an agent
+  // without a plan could not tell whether they had any enquiries at all — the
+  // page was simply an error. The request now succeeds and the leads come back
+  // redacted, which lets the agent see that interest exists while keeping the
+  // details behind the paywall.
+  if (isLocked) {
+    // A locked agent cannot search or filter on fields they are not allowed to
+    // read; honouring those filters would leak the same information one query at
+    // a time (searching an email and counting results reveals the email).
+    ["fullName", "email", "phoneNumber", "address", "search"].forEach(
+      (key) => delete filter[key]
     );
-
-    if (!subscription || subscription.isViewsContact === false) {
-      throw new ApiError(
-        httpStatus.FORBIDDEN,
-        "Your current subscription does not allow viewing contacts."
-      );
-    }
   }
 
   const contacts = await contactService.getAllcontact(filter, options, user);
+
+  const payload = isLocked
+    ? { ...contacts, results: contacts.results.map(redactLead) }
+    : contacts;
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Contacts retrieved successfully",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: {
+        ...payload,
+        // Totals are computed against every lead the agent owns, not just the
+        // paginated page, so the header counts stay correct as they flip pages.
+        stats: await contactService.getLeadStats(user),
+        // The client needs to know why detail is missing so it can offer the
+        // right remedy: subscribe, renew, or upgrade.
+        leadAccess: access,
+        isLocked,
+        lockReason: isLocked ? LEAD_ACCESS_MESSAGES[access] : null,
+      },
+    })
+  );
+});
+
+const getMyContacts = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ["status", "intent", "search"]);
+  const options = pick(req.query, ["sortBy", "limit", "page"]);
+  options.sortBy = options.sortBy || "createdAt:desc";
+
+  const contacts = await contactService.getSentContacts(filter, options, req.user.id);
 
   res.status(httpStatus.OK).json(
     response({
@@ -128,9 +182,54 @@ const getSelfContacts = catchAsync(async (req, res) => {
   );
 });
 
+const updateContactStatus = catchAsync(async (req, res) => {
+  const existing = await contactService.getContactById(req.params.contactId);
+
+  // Clients may only update the status of a lead belonging to them, and this
+  // must be checked before the update so a non-owner cannot mutate a row by
+  // guessing its id.
+  const isOwner = String(existing.propertyWoner?.id || existing.propertyWoner) === String(req.user.id);
+  if (req.user.role !== "admin" && !isOwner) {
+    throw new ApiError(httpStatus.FORBIDDEN, "This enquiry is not yours");
+  }
+
+  const contact = await contactService.updateContactStatus(
+    req.params.contactId,
+    req.body.status
+  );
+
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Contact status updated",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: { id: contact.id, status: contact.status },
+    })
+  );
+});
+
+const replyToContact = catchAsync(async (req, res) => {
+  // Ownership (is this the owner replying, or the original sender following
+  // up?) is resolved inside the service, since it decides which of the two
+  // this request is, not just whether it's allowed.
+  const contact = await contactService.addReply(req.params.contactId, req.user.id, req.body.message);
+
+  res.status(httpStatus.CREATED).json(
+    response({
+      message: "Reply sent",
+      status: "OK",
+      statusCode: httpStatus.CREATED,
+      data: contact,
+    })
+  );
+});
+
 module.exports = {
   createContact,
   getContact,
   getContacts,
   getSelfContacts,
+  getMyContacts,
+  updateContactStatus,
+  replyToContact,
 };

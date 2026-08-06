@@ -50,6 +50,12 @@ const deleteUser = {
   }),
 };
 
+const updateFcmToken = {
+  body: Joi.object().keys({
+    fcmToken: Joi.string().required(),
+  }),
+};
+
 
 const getHome = {
 
@@ -62,4 +68,5 @@ module.exports = {
   getUser,
   updateUser,
   deleteUser,
+  updateFcmToken,
 };

@@ -1,0 +1,13 @@
+# pnpm 11 build-script policy
+# These deps declare postinstall scripts but are not used in src/:
+#   - @scarf/scarf         (telemetry/analytics)
+#   - event-loop-stats     (native perf stats, pulled by express-status-monitor)
+#   - @firebase/util       (optional native perf helper, pulled by firebase-admin)
+#   - protobufjs           (optional native encoder, pulled by firebase-admin)
+# Explicitly opt them out of running install scripts - firebase-admin's app
+# load and messaging send were verified working without them.
+allowBuilds:
+  '@firebase/util': false
+  '@scarf/scarf': false
+  'event-loop-stats': false
+  protobufjs: false

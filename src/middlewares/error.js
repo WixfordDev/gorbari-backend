@@ -7,8 +7,18 @@ const ApiError = require('../utils/ApiError');
 const errorConverter = (err, req, res, next) => {
   let error = err;
   if (!(error instanceof ApiError)) {
-    const statusCode =
-      error.statusCode || error instanceof mongoose.Error ? httpStatus.BAD_REQUEST : httpStatus.INTERNAL_SERVER_ERROR;
+    // The original read `error.statusCode || error instanceof mongoose.Error`,
+    // which parses as `(error.statusCode) || (error instanceof mongoose.Error)`
+    // — a boolean — so the ternary always chose 400 whenever statusCode was set,
+    // turning genuine 500s into 400s. Each condition is now checked separately.
+    let statusCode;
+    if (error.statusCode) {
+      statusCode = error.statusCode;
+    } else if (error instanceof mongoose.Error) {
+      statusCode = httpStatus.BAD_REQUEST;
+    } else {
+      statusCode = httpStatus.INTERNAL_SERVER_ERROR;
+    }
     const message = error.message || httpStatus[statusCode];
     error = new ApiError(statusCode, message, false, err.stack);
   }
@@ -31,7 +41,13 @@ const errorHandler = (err, req, res, next) => {
     ...(config.env === 'development' && { stack: err.stack }),
   };
 
-  if (config.env === 'development') {
+  // 4xx responses are the API working as designed — an expired token, a
+  // validation failure, a missing record. Logging a full stack trace for those
+  // buries genuine faults in noise, and an unauthenticated visitor hitting a
+  // guarded endpoint is routine traffic rather than an incident. Morgan already
+  // records every 4xx with its message, so nothing is logged here; only 5xx,
+  // which means the server itself misbehaved, gets a trace.
+  if (statusCode >= httpStatus.INTERNAL_SERVER_ERROR) {
     logger.error(err);
   }
 

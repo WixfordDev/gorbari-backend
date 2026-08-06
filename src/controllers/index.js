@@ -6,3 +6,4 @@ module.exports.contactController = require("./contact.controller");
 module.exports.subscriptionController = require("./subscription.controller");
 module.exports.transactionController = require("./transaction.controller");
 module.exports.paymentGatewayController = require("./paymentGateway.controller");
+module.exports.notificationController = require("./notification.controller");

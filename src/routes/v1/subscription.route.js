@@ -4,12 +4,16 @@ const { checkAccess } = require("../../middlewares/auth");
 const validate = require("../../middlewares/validate");
 const { subscriptionController, transactionController } = require("../../controllers");
 const userFileUploadMiddleware = require("../../middlewares/fileUpload");
-const convertHeicToPngMiddleware = require("../../middlewares/converter");
-const UPLOADS_FOLDER_GATEWAY = "./public/uploads/other";
+const cloudinaryUpload = require("../../middlewares/cloudinaryUpload");
 
-const uploadGateway = userFileUploadMiddleware(UPLOADS_FOLDER_GATEWAY);
+const uploadGateway = userFileUploadMiddleware();
 
 const router = express.Router();
+
+// Declared before "/:id" so the literal path is not captured as an id.
+router
+  .route("/transactions/me")
+  .get(auth("common"), transactionController.myTransactionList);
 
 router
   .route("/transactions")
@@ -30,8 +34,8 @@ router
   .route("/take")
   .post(
     auth("common"),
-    [uploadGateway.single("screenshot")],
-    convertHeicToPngMiddleware(UPLOADS_FOLDER_GATEWAY),
+    uploadGateway.single("screenshot"),
+    cloudinaryUpload("other"),
     subscriptionController.takeSubscription
   );
 
