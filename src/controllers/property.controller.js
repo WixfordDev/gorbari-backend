@@ -296,8 +296,20 @@ const getPropertyById = catchAsync(async (req, res) => {
 const updateProperty = catchAsync(async (req, res) => {
   const imagesCount = req.files?.images?.length || 0;
 
-  // ✅ ADMIN: Skip subscription & image limit checks
+  const existingProperty = await propertyService.getPropertyById(req.params.propertyId);
+  if (!existingProperty) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
+  }
+
+  // ✅ ADMIN: Skip ownership, subscription & image limit checks
   if (req.user.role !== "admin") {
+    // Any "common"-authenticated role can reach this route, so without this
+    // check any logged-in user could edit a property they don't own just by
+    // guessing its id - `auth("common")` alone doesn't scope it to the owner.
+    if (existingProperty.createdBy?._id?.toString() !== req.user.id) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to modify this property");
+    }
+
     // ❌ No subscription
     if (!req.user.subscription?.isSubscriptionTaken) {
       if (imagesCount > 1) {
@@ -381,8 +393,12 @@ const uploadPropertyImage = catchAsync(async (req, res) => {
 
   const existingImagesCount = property.images?.length || 0;
 
-  // ✅ ADMIN: Skip subscription & image limit checks
+  // ✅ ADMIN: Skip ownership, subscription & image limit checks
   if (req.user.role !== "admin") {
+    if (property.createdBy?._id?.toString() !== req.user.id) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to modify this property");
+    }
+
     // ❌ No subscription
     if (!req.user.subscription?.isSubscriptionTaken) {
       if (existingImagesCount >= 1) {
@@ -434,6 +450,14 @@ const uploadPropertyImage = catchAsync(async (req, res) => {
 const deletePropertyImage = catchAsync(async (req, res) => {
   const { imagePath } = req.body;
 
+  const existingProperty = await propertyService.getPropertyById(req.params.propertyId);
+  if (!existingProperty) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
+  }
+  if (req.user.role !== "admin" && existingProperty.createdBy?._id?.toString() !== req.user.id) {
+    throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to modify this property");
+  }
+
   await cloudinaryService.destroyByUrl(imagePath);
 
   const property = await propertyService.deletePropertyImage(
@@ -453,6 +477,10 @@ const deletePropertyImage = catchAsync(async (req, res) => {
 
 const deleteProperty = catchAsync(async (req, res) => {
   const property = await propertyService.getPropertyById(req.params.propertyId);
+
+  if (property && req.user.role !== "admin" && property.createdBy?._id?.toString() !== req.user.id) {
+    throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to delete this property");
+  }
 
   if (property?.images?.length) {
     for (const image of property.images) {

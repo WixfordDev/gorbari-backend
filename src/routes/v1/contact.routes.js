@@ -4,10 +4,11 @@ const auth = require("../../middlewares/auth");
 const validate = require("../../middlewares/validate");
 const { contactController } = require("../../controllers");
 const contactValidation = require("../../validations/contact.validation");
+const { contactLimiter } = require("../../middlewares/rateLimiter");
 
 router
   .route("/")
-  .post(validate(contactValidation.createContact), contactController.createContact);
+  .post(contactLimiter, validate(contactValidation.createContact), contactController.createContact);
 
 router
   .route("/for-property")

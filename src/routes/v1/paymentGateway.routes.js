@@ -2,6 +2,7 @@ const express = require("express");
 const auth = require("../../middlewares/auth");
 const { checkAccess } = require("../../middlewares/auth");
 const validate = require("../../middlewares/validate");
+const paymentGatewayValidation = require("../../validations/paymentGateway.validation");
 const { paymentGatewayController } = require("../../controllers");
 const userFileUploadMiddleware = require("../../middlewares/fileUpload");
 const cloudinaryUpload = require("../../middlewares/cloudinaryUpload");
@@ -16,19 +17,21 @@ router
   .post(
     auth("common"), checkAccess("paymentGateways"),
     uploadGateway.single("logo"),
+    validate(paymentGatewayValidation.createGateway),
     cloudinaryUpload("other"),
     paymentGatewayController.createGateway
   );
 
 router
   .route("/:id")
-  .get(auth("common"), checkAccess("paymentGateways"), paymentGatewayController.getGatewayById)
+  .get(auth("common"), checkAccess("paymentGateways"), validate(paymentGatewayValidation.gatewayIdParam), paymentGatewayController.getGatewayById)
   .patch(
     auth("common"), checkAccess("paymentGateways"),
     uploadGateway.single("logo"),
+    validate(paymentGatewayValidation.updateGateway),
     cloudinaryUpload("other"),
     paymentGatewayController.updateGatewayById
   )
-  .delete(auth("common"), checkAccess("paymentGateways"), paymentGatewayController.deleteGatewayById);
+  .delete(auth("common"), checkAccess("paymentGateways"), validate(paymentGatewayValidation.gatewayIdParam), paymentGatewayController.deleteGatewayById);
 
 module.exports = router;
