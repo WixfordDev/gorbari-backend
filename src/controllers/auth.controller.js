@@ -61,6 +61,13 @@ const login = catchAsync(async (req, res) => {
   if (isUser?.isDeleted === true) {
     throw new ApiError(httpStatus.BAD_REQUEST, "This Account is Deleted");
   }
+  if (isUser?.isBlocked === true) {
+    // jwtVerify already refuses this user on every subsequent request, so
+    // this isn't a security gap either way - but issuing "Login Successful"
+    // plus a real token pair that silently can't do anything is confusing.
+    // Rejecting here instead gives a clear reason immediately.
+    throw new ApiError(httpStatus.BAD_REQUEST, "Your account has been blocked");
+  }
   if (isUser?.isEmailVerified === false) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Email not verified");
   }

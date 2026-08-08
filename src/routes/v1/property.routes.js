@@ -33,6 +33,10 @@ router
   .post(
     auth("common"),
     validate(propertyValidation.propertyIdParam),
+    // Ownership check before multer/cloudinaryUpload, not after: a non-owner
+    // is rejected before a real upload happens instead of paying for one
+    // that just gets thrown away.
+    propertyController.requirePropertyOwnership,
     uploadProperty.single("image"),
     cloudinaryUpload("propertys"),
     propertyController.uploadPropertyImage

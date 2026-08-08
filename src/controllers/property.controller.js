@@ -379,26 +379,33 @@ const updateProperty = catchAsync(async (req, res) => {
   );
 });
 
+// Runs before multer/cloudinaryUpload on the upload-image route so a
+// non-owner is rejected before a real (billed) upload happens at all, rather
+// than after - the ownership check used to live inside uploadPropertyImage
+// itself, downstream of both.
+const requirePropertyOwnership = catchAsync(async (req, res, next) => {
+  const property = await propertyService.getPropertyById(req.params.propertyId);
+  if (!property) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
+  }
+  if (req.user.role !== "admin" && property.createdBy?._id?.toString() !== req.user.id) {
+    throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to modify this property");
+  }
+  req.property = property;
+  next();
+});
+
 const uploadPropertyImage = catchAsync(async (req, res) => {
   if (!req.file) {
     throw new ApiError(httpStatus.BAD_REQUEST, "No image uploaded");
   }
 
-  // Get property first (to count existing images)
-  const property = await propertyService.getPropertyById(req.params.propertyId);
-
-  if (!property) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Property not found");
-  }
-
+  // Ownership already verified by requirePropertyOwnership before multer ran.
+  const property = req.property;
   const existingImagesCount = property.images?.length || 0;
 
-  // ✅ ADMIN: Skip ownership, subscription & image limit checks
+  // ✅ ADMIN: Skip subscription & image limit checks
   if (req.user.role !== "admin") {
-    if (property.createdBy?._id?.toString() !== req.user.id) {
-      throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to modify this property");
-    }
-
     // ❌ No subscription
     if (!req.user.subscription?.isSubscriptionTaken) {
       if (existingImagesCount >= 1) {
@@ -608,6 +615,7 @@ module.exports = {
   deletePropertyImage,
   deleteProperty,
   getPropertiesForAgent,
+  requirePropertyOwnership,
 
   boostProperty,
 };
