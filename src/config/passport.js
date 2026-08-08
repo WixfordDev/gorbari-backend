@@ -14,7 +14,10 @@ const jwtVerify = async (payload, done) => {
       throw new Error('Invalid token type');
     }
     const user = await User.findById(payload.sub);
-    if (!user) {
+    // A still-valid access token issued before a block/delete must not keep
+    // working until it naturally expires (up to 7 days with "remember me") -
+    // re-checking these flags on every request is what actually revokes it.
+    if (!user || user.isBlocked || user.isDeleted) {
       return done(null, false);
     }
     done(null, user);

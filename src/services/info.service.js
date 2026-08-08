@@ -211,7 +211,12 @@ const getAllStatus = async (year, user) => {
 
 const createPrivacy = async (privacyBody) => {
   if (privacyBody.content) {
-    privacyBody.content = he.decode(privacyBody.content);
+    // Decode before sanitising, not after - see updateHomepageSettings for
+    // why the order matters. This was missing here even though the same
+    // admin rich-text editor writes this content, which meant Privacy Policy
+    // could carry an unsanitised <script> straight onto a page every site
+    // visitor loads.
+    privacyBody.content = sanitizeRichHtml(he.decode(privacyBody.content));
   }
 
   const existingPrivacy = await PrivacyPolicy.findOne();
@@ -232,7 +237,7 @@ const queryPrivacy = async () => {
 
 const createTerms = async (termsBody) => {
   if (termsBody.content) {
-    termsBody.content = he.decode(termsBody.content);
+    termsBody.content = sanitizeRichHtml(he.decode(termsBody.content));
   }
 
   const existingTerms = await TermsAndCondition.findOne();
@@ -253,7 +258,7 @@ const queryTerms = async () => {
 
 const createAboutUs = async (body) => {
   if (body.content) {
-    body.content = he.decode(body.content);
+    body.content = sanitizeRichHtml(he.decode(body.content));
   }
 
   const existingAboutUs = await AboutUs.findOne();
@@ -284,7 +289,8 @@ const getHomepageSettings = async () => {
   const settings = await HomepageSettings.findOne()
     .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
     .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
-    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeLandingProperties", PROPERTY_SHOWCASE_FIELDS);
 
   if (settings) return settings;
 
@@ -301,6 +307,10 @@ const getHomepageSettings = async () => {
     heroProperties: heroDefaults,
     dreamHomeProperties: dreamHomeDefaults,
     featuredProperties: featuredDefaults,
+    // Left empty rather than defaulted: the "Ready to Find Your Dream Home?"
+    // section falls back to boosted properties itself when this is empty, so
+    // there's no need for a second computed default list here.
+    dreamHomeLandingProperties: [],
     dreamHomeHeading: HomepageSettings.schema.path("dreamHomeHeading").defaultValue,
     dreamHomeSubheading: HomepageSettings.schema.path("dreamHomeSubheading").defaultValue,
     dreamHomeContent: HomepageSettings.schema.path("dreamHomeContent").defaultValue,
@@ -333,7 +343,8 @@ const updateHomepageSettings = async (body) => {
   return HomepageSettings.findById(saved._id)
     .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
     .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
-    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeLandingProperties", PROPERTY_SHOWCASE_FIELDS);
 };
 
 const getPublicStatus = async () => {

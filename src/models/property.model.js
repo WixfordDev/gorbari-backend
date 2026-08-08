@@ -248,6 +248,16 @@ propertySchema.virtual("pricePerSqFt").get(function () {
 propertySchema.plugin(toJSON);
 propertySchema.plugin(paginate);
 
+// `isDeleted: false` is in the $match stage of every property query this app
+// makes, `createdAt` is the default sort, `isBosted` drives the homepage/
+// promotions boosted-listings queries, and `createdBy` scopes the "my
+// properties" agent view - none of that was indexed (only slug/division/
+// district were), so every one of those queries was a full collection scan.
+// Invisible at today's handful of listings, not once this actually has data.
+propertySchema.index({ isDeleted: 1, createdAt: -1 });
+propertySchema.index({ createdBy: 1, isDeleted: 1 });
+propertySchema.index({ isDeleted: 1, isBosted: 1 });
+
 const Property = mongoose.model("Property", propertySchema);
 
 module.exports = Property;

@@ -9,7 +9,7 @@ const httpStatus = require("http-status");
 const config = require("./config/config");
 const morgan = require("./config/morgan");
 const { jwtStrategy } = require("./config/passport");
-const { authLimiter } = require("./middlewares/rateLimiter");
+const { authLimiter, globalLimiter } = require("./middlewares/rateLimiter");
 const routes = require("./routes/v1");
 const { errorConverter, errorHandler } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
@@ -58,6 +58,10 @@ passport.use("jwt", jwtStrategy);
 if (config.env === "production") {
   app.use("/api/v1/auth", authLimiter);
 }
+
+// baseline throttle so no route is left completely unlimited; the stricter
+// limiters above still apply first for the endpoints that need them
+app.use("/api/v1", globalLimiter);
 
 // v1 api routes
 app.use("/api/v1", routes);

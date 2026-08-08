@@ -9,7 +9,13 @@ const register = {
     email: Joi.string().required().email(),
     phoneNumber: Joi.string(),
     password: Joi.string().required().custom(password),
-    role: Joi.string().required().valid("user", "admin", "agent"),
+    // "admin" is deliberately excluded: this is a public, unauthenticated
+    // endpoint, and auth.controller.js's register() spreads the rest of the
+    // body (including role) straight into User.create() with no further
+    // check - allowing "admin" here meant anyone could self-register a fully
+    // privileged account. "agent" stays allowed; that's the legitimate
+    // self-service path for a real-estate agent creating their own account.
+    role: Joi.string().required().valid("user", "agent"),
   }),
 };
 
