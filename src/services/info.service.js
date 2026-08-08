@@ -284,7 +284,8 @@ const getHomepageSettings = async () => {
   const settings = await HomepageSettings.findOne()
     .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
     .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
-    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeLandingProperties", PROPERTY_SHOWCASE_FIELDS);
 
   if (settings) return settings;
 
@@ -301,6 +302,10 @@ const getHomepageSettings = async () => {
     heroProperties: heroDefaults,
     dreamHomeProperties: dreamHomeDefaults,
     featuredProperties: featuredDefaults,
+    // Left empty rather than defaulted: the "Ready to Find Your Dream Home?"
+    // section falls back to boosted properties itself when this is empty, so
+    // there's no need for a second computed default list here.
+    dreamHomeLandingProperties: [],
     dreamHomeHeading: HomepageSettings.schema.path("dreamHomeHeading").defaultValue,
     dreamHomeSubheading: HomepageSettings.schema.path("dreamHomeSubheading").defaultValue,
     dreamHomeContent: HomepageSettings.schema.path("dreamHomeContent").defaultValue,
@@ -333,7 +338,8 @@ const updateHomepageSettings = async (body) => {
   return HomepageSettings.findById(saved._id)
     .populate("heroProperties", PROPERTY_SHOWCASE_FIELDS)
     .populate("dreamHomeProperties", PROPERTY_SHOWCASE_FIELDS)
-    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS);
+    .populate("featuredProperties", PROPERTY_SHOWCASE_FIELDS)
+    .populate("dreamHomeLandingProperties", PROPERTY_SHOWCASE_FIELDS);
 };
 
 const getPublicStatus = async () => {

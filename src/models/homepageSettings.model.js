@@ -18,6 +18,17 @@ const homepageSettingsSchema = new mongoose.Schema(
         ref: "Property",
       },
     ],
+    // For the "Ready to Find Your Dream Home?" section (DreamHomeLanding.jsx)
+    // - not to be confused with dreamHomeProperties above, which belongs to
+    // the separate "Explore & Find Your Dream Home" section. Unlimited, like
+    // heroProperties/featuredProperties: falls back to boosted properties on
+    // the frontend when empty, so it's never required to be non-empty here.
+    dreamHomeLandingProperties: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Property",
+      },
+    ],
     featuredProperties: [
       {
         type: mongoose.Schema.Types.ObjectId,
